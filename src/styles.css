@@ -1,0 +1,5300 @@
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("/fonts/Lexend-300.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/Lexend-400.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/Lexend-500.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/fonts/Lexend-600.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Lexend";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/Lexend-700.ttf") format("truetype");
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  color-scheme: dark;
+  --app-font-family: "Lexend", "Segoe UI", system-ui, sans-serif;
+  --bg-color: #21324a;
+  --blue-color: #0e192a;
+  --gray-color: #afafaf;
+  --light-gray-color: #ececec;
+  --white-color: #fff;
+  --medium-blue-color: #11263a;
+  --light-blue-color: #00e5ce;
+  --yellow-color: #ffff00;
+  --purple-color: #423ea3;
+  --green-color: #00ffb3;
+  --green-btn-color: #00d8ad;
+  --bg-footer: #0b1220;
+  --bg-search: hsla(0, 0%, 100%, 0.3);
+  --bg-control: #111727;
+  --dark-color: #16181b;
+  --border-control: #0c1524;
+  --bg-index: #0b1220;
+  --bg-btn-play: #2bdbec;
+  --alpha-color: hsla(0, 0%, 100%, 0.1);
+  --beta-color: rgba(244, 246, 248, 0.02);
+}
+
+html {
+  font-size: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100%;
+  background: var(--bg-index);
+  color: var(--white-color);
+  font-family: var(--app-font-family);
+  font-size: 0.9rem;
+  font-weight: 300;
+}
+
+button,
+input {
+  font: inherit;
+  font-family: var(--app-font-family);
+}
+
+button {
+  border: 0;
+}
+
+.appShell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: 88px;
+  background: var(--bg-index);
+}
+
+.appShell.viewLyrics {
+  overflow-y: hidden;
+}
+
+/* ===== Ambient background ===== */
+/* The single source of truth for the ambient background lives further down
+   in the "Extension side panel" section (around the .ambientBg rule). It is
+   the one that the CSS bundler keeps last, so it wins. Do NOT redefine
+   .ambientBg, .ambientBg::after or .ambientBg img above this point —
+   duplicates cascade and stale declarations (like a leftover
+   background-color) will leak through. */
+
+.topBar {
+  display: grid;
+  grid-template-columns: 180px minmax(320px, 560px) auto;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  height: 75px;
+  margin: 0;
+  padding: 0 clamp(18px, 4vw, 72px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.brand img {
+  width: 150px;
+  height: auto;
+  transform: scale(1);
+  transform-origin: center;
+}
+
+.searchWrap {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.055)),
+    rgba(12, 20, 34, 0.76);
+  color: var(--gray-color);
+  opacity: 0.8;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
+}
+
+.searchBox.isFocused {
+  border-color: rgba(0, 255, 179, 0.45);
+  background:
+    linear-gradient(180deg, rgba(0, 255, 179, 0.12), rgba(255, 255, 255, 0.055)),
+    rgba(12, 20, 34, 0.94);
+  color: var(--green-color);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.22),
+    0 0 0 3px rgba(0, 255, 179, 0.08);
+}
+
+.searchBox input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--white-color);
+  font-size: 0.92rem;
+  font-weight: 300;
+}
+
+.searchBox input::placeholder {
+  color: rgba(236, 236, 236, 0.68);
+  font-weight: 200;
+}
+
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--gray-color);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.searchClear:hover {
+  border-color: rgba(0, 255, 179, 0.32);
+  background: rgba(0, 255, 179, 0.1);
+  color: var(--green-color);
+}
+
+.searchResults {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 6px;
+  max-height: min(430px, calc(100vh - 94px));
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgba(0, 255, 179, 0.2);
+  background:
+    linear-gradient(180deg, rgba(16, 28, 46, 0.98), rgba(10, 17, 30, 0.98)),
+    var(--bg-index);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.searchResults::-webkit-scrollbar {
+  display: none;
+}
+
+.searchResult {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--gray-color);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.searchResult:hover,
+.searchResult.isCurrent {
+  border-color: rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.08);
+}
+
+.searchResult:hover {
+  transform: translateY(-1px);
+}
+
+.searchResult img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  transform: scale(1);
+  transform-origin: center;
+}
+
+.searchResultMeta {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.searchResultMeta strong {
+  overflow: hidden;
+  color: var(--white-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.searchResultMeta small {
+  overflow: hidden;
+  color: var(--gray-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 300;
+}
+
+.searchTag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.08);
+  color: var(--green-color);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.searchEmpty {
+  padding: 18px 14px;
+  color: var(--gray-color);
+  font-size: 0.88rem;
+  font-weight: 300;
+  text-align: center;
+}
+
+.topBadge {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 255, 179, 0.28);
+  background: rgba(0, 255, 179, 0.08);
+  color: var(--green-color);
+  font-weight: 400;
+}
+
+.pageGrid {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-self: stretch;
+  gap: 18px;
+  width: 100%;
+  margin: 0;
+  align-items: stretch;
+  padding-bottom: 20px;
+}
+
+.pageGrid .nowPlaying,
+.pageGrid .songListPanel {
+  flex: 1;
+  min-width: 0;
+}
+
+.lyricsPanel {
+  grid-area: lyrics;
+  position: relative;
+  width: 100%;
+  min-height: 560px;
+  height: calc(100vh - 155px);
+  overflow: hidden;
+  background-color: var(--blue-color);
+}
+
+.lyricsBgImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(40px);
+  opacity: 0.55;
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.lyricsBgShade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(11, 18, 32, 0.72)),
+    rgba(0, 0, 0, 0.3);
+}
+
+.lyricsStage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: clamp(36px, 6vw, 80px);
+  width: 90%;
+  height: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: clamp(36px, 6vh, 72px) 0 clamp(36px, 6vh, 72px);
+}
+
+.songAction {
+  width: 400px;
+  flex: 0 0 400px;
+}
+
+.discWrap {
+  position: relative;
+  width: 380px;
+  height: 380px;
+  overflow: hidden;
+  border: 5px solid var(--white-color);
+  border-radius: 50%;
+}
+
+.discWrap::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  content: "";
+  border: 6px solid var(--light-gray-color);
+  border-radius: 50%;
+  background-color: var(--dark-color);
+}
+
+.discWrap::after {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  content: "";
+  border-radius: 50%;
+  background-color: #000;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.discWrap img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: rotate(var(--disc-rotate-angle, 0deg)) scale(1.5);
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+/* ===== Disc-reactive zoom + rotation (driven by src/utils/bassReactiveCover.js) =====
+   JS writes --bass / --bass-smooth / --avatar-pulse / --disc-rotate-angle
+   into .discWrap every animation frame:
+     .discWrap:       scale(1 + avatar-pulse * 0.16)           ← zoom pulse
+     .discWrap img:   rotate(angle) scale(1.5)                  ← JS-driven spin
+   The static scale(1.5) on the img hides the square cover corners inside
+   the circular discWrap (which has overflow: hidden). */
+.songAction .discWrap {
+  --bass: 0;
+  --bass-smooth: 0;
+  --avatar-pulse: 0;
+  transform: scale(calc(1 + var(--avatar-pulse, 0) * 0.16));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.songAction .discWrap img {
+  will-change: transform, filter;
+  filter:
+    saturate(calc(1 + var(--avatar-pulse, 0) * 0.18))
+    contrast(calc(1 + var(--avatar-pulse, 0) * 0.08))
+    brightness(calc(1 + var(--avatar-pulse, 0) * 0.06))
+    blur(0.8px);
+}
+
+.lyricsColumn {
+  min-width: 0;
+  flex: 1;
+}
+
+.lyricsBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 400px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-padding-block: 0;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  color: var(--light-gray-color);
+  -ms-overflow-style: none;
+}
+
+.lyricsBox::-webkit-scrollbar {
+  display: none;
+}
+
+/* Fixed 5-slot lyrics window: pins the active line to the middle slot,
+   renders 4 surrounding slots (2 above + 2 below). Scroll and snap are
+   disabled — the active line is never moved via scrollIntoView / scrollTo. */
+.lyricsBox.fixedLyricsWindow {
+  overflow: hidden;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+}
+
+.lyricsTrack {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.lyricsBox .lyricLine,
+.lyricsBox .lyricNotice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: min(100%, 1160px);
+  height: auto;
+  min-height: 76px !important;
+  margin-inline: auto;
+  padding: 0 clamp(12px, 3vw, 36px);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--light-gray-color);
+  cursor: pointer;
+  font-size: clamp(1.55rem, 1.85vw, 2rem);
+  font-weight: 500;
+  line-height: 1.2;
+  opacity: 0.45;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+  transform: scale(1) translateY(0);
+  transition:
+    color 420ms ease,
+    opacity 420ms ease,
+    font-weight 420ms ease,
+    font-size 420ms ease,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    text-shadow 420ms ease;
+  will-change: opacity, transform;
+  animation: lyricLineEnter 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lyricsBox .lyricLine:hover {
+  color: var(--white-color);
+}
+
+.lyricsBox .activeLyric {
+  color: var(--yellow-color);
+  opacity: 1;
+  font-weight: 800;
+  text-shadow: 0 0 22px rgba(217, 221, 0, 0.28);
+  filter: brightness(1.12);
+  animation: lyricActiveEnter 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lyricsBox .lyricLine.empty {
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+  cursor: default;
+}
+
+/* Lyrics enter/active animations — give the 5-slot window a flowing feel
+   instead of an instant text swap when audio advances. The slot's `key`
+   includes the original lyric index, so React remounts the button when
+   the line content changes and the animation replays naturally. */
+@keyframes lyricLineEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  100% {
+    opacity: 0.45;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes lyricActiveEnter {
+  0% {
+    opacity: 0.45;
+    color: var(--light-gray-color);
+    font-weight: 500;
+    text-shadow: none;
+    filter: brightness(0.6);
+  }
+  55% {
+    opacity: 1;
+    color: var(--yellow-color);
+    font-weight: 800;
+    text-shadow: 0 0 14px rgba(217, 221, 0, 0.18);
+    filter: brightness(1.25);
+  }
+  100% {
+    opacity: 1;
+    color: var(--yellow-color);
+    font-weight: 800;
+    text-shadow: 0 0 22px rgba(217, 221, 0, 0.28);
+    filter: brightness(1.12);
+  }
+}
+
+.lyricsBox .lyricSpacer {
+  height: 76px;
+  min-height: 76px;
+  flex-shrink: 0;
+}
+
+.lyricsBox .lyricNotice {
+  cursor: default;
+  opacity: 1;
+}
+
+.nowPlaying,
+.songListPanel {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--beta-color);
+}
+
+.nowPlaying {
+  grid-area: hero;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 330px;
+  margin-left: clamp(18px, 4vw, 72px);
+  padding: 24px;
+  overflow: hidden;
+}
+
+.nowPlayingTop {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 24px 24px;
+}
+
+.weatherSlot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: stretch;
+  min-width: 0;
+  padding: 12px 18px 14px;
+}
+
+.nowPlayingBottom {
+  flex: 0 0 auto;
+  min-height: 0;
+  display: block;
+  text-align: center;
+  padding: 16px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.typingText {
+  font-weight: 300;
+  font-size: 16px;
+  letter-spacing: -0.3px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.typingText {
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.typingCursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  background: currentColor;
+  vertical-align: text-bottom;
+  animation: typingBlink 0.8s infinite;
+}
+
+@keyframes typingBlink {
+  0%, 45% {
+    opacity: 1;
+  }
+  46%, 100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .nowPlayingBottom {
+    padding: 10px 8px;
+  }
+  .typingText {
+    font-weight: 300;
+    font-size: 16px;
+    letter-spacing: -0.2px;
+  }
+}
+
+@media (max-width: 400px) {
+  /* Typing text gets too tight on very narrow phones; collapse it to keep the card calm. */
+  .nowPlayingBottom {
+    display: none;
+  }
+}
+
+/* ===== Weather widget (Open-Meteo) ===== */
+.weatherWidget {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 14px 20px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+  min-width: 0;
+}
+
+.weatherWidget .weatherIcon {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.weatherWidget .weatherMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.weatherWidget .weatherTemp {
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.weatherWidget .weatherLocation {
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--text-muted, rgba(255, 255, 255, 0.62));
+  max-width: 220px;
+}
+
+.weatherWidget .weatherMeta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 14px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted, rgba(255, 255, 255, 0.62));
+  text-align: right;
+  min-width: 0;
+}
+
+.weatherWidget .weatherMeta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+@media (max-width: 720px) {
+  .weatherWidget {
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  .weatherWidget .weatherMeta {
+    gap: 4px 10px;
+    font-size: 0.72rem;
+  }
+  .weatherWidget .weatherMeta span {
+    max-width: 130px;
+  }
+  .weatherWidget .weatherLocation {
+    max-width: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .weatherWidget .weatherMeta {
+    /* Hide detailed meta on very narrow phones — temp + location stay visible */
+    display: none;
+  }
+}
+
+.coverStack {
+  --glitch-primary: #00ffd5;
+  --glitch-secondary: #ff3764;
+  --glitch-bg: #000000;
+  position: relative;
+  align-self: start;
+  aspect-ratio: 1;
+  overflow: hidden;
+  width: 100%;
+  background: var(--glitch-bg);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.35);
+  isolation: isolate;
+}
+
+.coverBase,
+.coverGlow,
+.coverRed,
+.coverCyan,
+.coverBands,
+.coverFrags,
+.coverScan,
+.coverNoise {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.coverBase {
+  z-index: 1;
+  object-fit: cover;
+  animation: coverShake 4.6s infinite steps(1, end);
+}
+
+.coverGlow {
+  z-index: 2;
+  object-fit: cover;
+  filter: blur(14px);
+  opacity: 0.5;
+  transform: translateY(10px) scale(0.9);
+  animation: none;
+}
+
+.coverRed,
+.coverCyan {
+  opacity: 0;
+  object-fit: cover;
+  mix-blend-mode: screen;
+}
+
+.coverRed {
+  z-index: 2;
+  filter: drop-shadow(-2px 0 var(--glitch-secondary));
+  animation: coverGhostRed 4.6s infinite steps(1, end);
+}
+
+.coverCyan {
+  z-index: 2;
+  filter: drop-shadow(2px 0 var(--glitch-primary));
+  animation: coverGhostCyan 4.6s infinite steps(1, end);
+}
+
+/* Bands — horizontal glitch strips */
+.coverBands {
+  z-index: 4;
+  overflow: hidden;
+}
+
+.coverBand {
+  position: absolute;
+  left: -3%;
+  width: 106%;
+  overflow: hidden;
+  opacity: 0;
+  background: rgba(4, 12, 18, 0.55);
+  animation: coverBandFlash 4.2s infinite steps(1, end);
+}
+
+.coverBand img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+  opacity: 0.64;
+  filter: contrast(1.18) saturate(1.12);
+}
+
+.coverBand.b1 { top: 6%;  height: 10px; animation-delay: 0s;   transform: translateX(-7px); }
+.coverBand.b1 img { top: -19px;  transform: translateX(8px); }
+
+.coverBand.b2 { top: 15%; height: 8px;  animation-delay: 0.05s; transform: translateX(9px); }
+.coverBand.b2 img { top: -48px;  transform: translateX(-10px); }
+
+.coverBand.b3 { top: 24%; height: 12px; animation-delay: 0.10s; transform: translateX(-10px); }
+.coverBand.b3 img { top: -77px;  transform: translateX(12px); }
+
+.coverBand.b4 { top: 35%; height: 9px;  animation-delay: 0.15s; transform: translateX(6px); }
+.coverBand.b4 img { top: -112px; transform: translateX(-8px); }
+
+.coverBand.b5 { top: 46%; height: 14px; animation-delay: 0.20s; transform: translateX(-12px); }
+.coverBand.b5 img { top: -147px; transform: translateX(14px); }
+
+.coverBand.b6 { top: 58%; height: 9px;  animation-delay: 0.25s; transform: translateX(8px); }
+.coverBand.b6 img { top: -186px; transform: translateX(-10px); }
+
+.coverBand.b7 { top: 70%; height: 11px; animation-delay: 0.30s; transform: translateX(-6px); }
+.coverBand.b7 img { top: -224px; transform: translateX(8px); }
+
+.coverBand.b8 { top: 83%; height: 8px;  animation-delay: 0.35s; transform: translateX(7px); }
+.coverBand.b8 img { top: -266px; transform: translateX(-7px); }
+
+/* Pixel / data fragments */
+.coverFrags {
+  z-index: 5;
+}
+
+.coverFrag {
+  position: absolute;
+  height: 4px;
+  opacity: 0;
+  background:
+    linear-gradient(90deg,
+      transparent 0 10%,
+      #00ffd5 10% 20%,
+      transparent 20% 30%,
+      rgba(255, 55, 120, 0.95) 30% 40%,
+      transparent 40% 56%,
+      #00ffd5 56% 64%,
+      transparent 64% 100%);
+  mix-blend-mode: screen;
+  animation: coverFragBlink 4.2s infinite steps(1, end);
+}
+
+.coverFrag.f1 { top: 8%;   left: 8%;   width: 58px;  animation-delay: 0.02s; }
+.coverFrag.f2 { top: 16%;  right: 8%;  width: 40px;  animation-delay: 0.07s; }
+.coverFrag.f3 { top: 26%;  left: 5%;   width: 76px;  animation-delay: 0.12s; }
+.coverFrag.f4 { top: 36%;  right: 12%; width: 64px;  animation-delay: 0.16s; }
+.coverFrag.f5 { top: 47%;  left: 4%;   width: 96px;  animation-delay: 0.21s; }
+.coverFrag.f6 { top: 59%;  right: 7%;  width: 54px;  animation-delay: 0.26s; }
+.coverFrag.f7 { top: 71%;  left: 16%;  width: 66px;  animation-delay: 0.31s; }
+.coverFrag.f8 { top: 84%;  right: 18%; width: 52px;  animation-delay: 0.36s; }
+
+/* Scan lines overlay */
+.coverScan {
+  z-index: 6;
+  opacity: 0.18;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.025) 0,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+  mix-blend-mode: overlay;
+}
+
+/* Noise dots */
+.coverNoise {
+  z-index: 7;
+  opacity: 0.035;
+  background:
+    repeating-radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 4px);
+  animation: coverNoiseMove 0.5s infinite steps(2, end);
+}
+
+/* ---- Animations ---- */
+
+@keyframes coverShake {
+  0%, 100% { transform: translate(0);     filter: none; }
+  10% { transform: translate(-1px, 0);   filter: contrast(1.04); }
+  11% { transform: translate(1px, 0); }
+  12% { transform: translate(0);        filter: none; }
+  48% { transform: translate(1px, -1px); filter: brightness(1.03); }
+  49% { transform: translate(0);         filter: none; }
+  76% { transform: translate(-1px, 1px); }
+  77% { transform: translate(0); }
+}
+
+@keyframes coverGhostRed {
+  0%, 100% { opacity: 0;   transform: translateX(0); }
+  10% { opacity: 0.18; transform: translateX(-1px); }
+  12% { opacity: 0;    transform: translateX(0); }
+  48% { opacity: 0.12; transform: translateX(-1px); }
+  49% { opacity: 0;    transform: translateX(0); }
+  76% { opacity: 0.10; transform: translateX(-1px); }
+  77% { opacity: 0;    transform: translateX(0); }
+}
+
+@keyframes coverGhostCyan {
+  0%, 100% { opacity: 0;   transform: translateX(0); }
+  10% { opacity: 0.15; transform: translateX(1px); }
+  12% { opacity: 0;    transform: translateX(0); }
+  48% { opacity: 0.11; transform: translateX(1px); }
+  49% { opacity: 0;    transform: translateX(0); }
+  76% { opacity: 0.09; transform: translateX(1px); }
+  77% { opacity: 0;    transform: translateX(0); }
+}
+
+@keyframes coverBandFlash {
+  0%, 100% { opacity: 0; }
+  10% { opacity: 0.95; }
+  11% { opacity: 0.40; }
+  12% { opacity: 0.80; }
+  13% { opacity: 0; }
+  48% { opacity: 0.65; }
+  49% { opacity: 0; }
+  76% { opacity: 0.52; }
+  77% { opacity: 0; }
+}
+
+@keyframes coverFragBlink {
+  0%, 100% { opacity: 0;   transform: translateX(0); }
+  10% { opacity: 0.95; transform: translateX(8px); }
+  11% { opacity: 0.40; transform: translateX(-5px); }
+  12% { opacity: 0.75; transform: translateX(2px); }
+  13% { opacity: 0;    transform: translateX(0); }
+  48% { opacity: 0.55; transform: translateX(-6px); }
+  49% { opacity: 0;    transform: translateX(0); }
+  76% { opacity: 0.42; transform: translateX(4px); }
+  77% { opacity: 0;    transform: translateX(0); }
+}
+
+@keyframes coverNoiseMove {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(4%, -3%); }
+}
+
+.songHero {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.emptyPlayer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.emptyPlayer .emptyPlayerIcon {
+  font-size: 4rem;
+  line-height: 1;
+  color: var(--green-color);
+  opacity: 0.55;
+}
+
+.emptyPlayer h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-weight: 700;
+  color: var(--white-color);
+  opacity: 0.85;
+}
+
+.miniSongEmpty .miniSongPlaceholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: var(--green-color);
+  font-size: 1.25rem;
+}
+
+.miniSongEmpty strong {
+  opacity: 0.7;
+}
+
+.miniSongEmpty span:last-child {
+  opacity: 0.5;
+}
+
+.eyebrow,
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--green-color);
+  font-weight: 400;
+}
+
+.eyebrow {
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.songHero h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(2.16rem, 4vw, 4.4rem);
+  line-height: 1;
+  font-weight: 700;
+}
+
+.artistName {
+  margin-top: 12px;
+  color: var(--gray-color);
+  font-size: 1rem;
+  font-weight: 300;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.tagRow span,
+.songTag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.08);
+  color: var(--green-color);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.liveLyric {
+  min-height: 50px;
+  margin: 22px 0 0;
+  color: var(--yellow-color);
+  font-size: 1.05rem;
+  font-weight: 300;
+  line-height: 1.45;
+}
+
+.heroControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.ghostButton,
+.playButton,
+.playerButtons button,
+.playerRight button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--white-color);
+  background: transparent;
+}
+
+.ghostButton {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.playButton {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--white-color);
+  color: var(--green-btn-color);
+  box-shadow: 0 0 30px rgba(21, 255, 146, 0.5);
+}
+
+.songListPanel {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  margin-right: clamp(18px, 4vw, 72px);
+  padding: 22px;
+}
+
+.sectionTitle {
+  margin-bottom: 16px;
+}
+
+.sectionTitle h2 {
+  flex: 1;
+  color: var(--white-color);
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+
+.songList {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 8px;
+  height: 100%;
+  max-height: 1040px !important;
+  overflow: auto;
+  padding-right: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  align-content: start;
+}
+
+.songList::-webkit-scrollbar {
+  display: none;
+}
+
+.songRow {
+  display: grid;
+  grid-template-columns: 34px 50px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 80px;
+  padding: 15px;
+  border: 0;
+  background: var(--beta-color);
+  color: var(--gray-color);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+}
+
+.songRow:hover,
+.songRow.isActive {
+  background-color: var(--bg-color);
+  opacity: 0.8;
+}
+
+.songRow:hover .songMeta strong,
+.songRow.isActive .songMeta strong {
+  color: var(--green-color);
+}
+
+.rowIndex {
+  color: var(--yellow-color);
+  font-weight: 400;
+  text-align: center;
+}
+
+.rowCover {
+  display: inline-block;
+  width: 50px;
+  height: 50px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rowCover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.songMeta {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.songMeta strong,
+.miniSong strong {
+  overflow: hidden;
+  color: var(--white-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.songMeta small,
+.miniSong span {
+  overflow: hidden;
+  color: var(--white-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 300;
+}
+
+.playerBar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 20% 60% 20%;
+  align-items: center;
+  width: 100%;
+  height: 80px;
+  border-top: 2px solid var(--border-control);
+  background-color: var(--bg-control);
+  background-image: linear-gradient(90deg, var(--bg-color), var(--bg-control));
+  color: var(--white-color);
+  font-size: 0.8rem;
+  overflow: hidden;
+}
+
+.miniSong {
+  display: grid;
+  grid-template-columns: 30px 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+  height: 100%;
+  padding-left: 5vw;
+  overflow: hidden;
+}
+
+.miniCover {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.miniCover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.miniSong div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.miniEqualizer {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 24px;
+}
+
+.miniEqualizer.isActive {
+  opacity: 1;
+}
+
+.miniEqualizer span {
+  position: absolute;
+  bottom: 0;
+  display: inline-block;
+  width: 4px;
+  background-color: var(--green-color);
+}
+
+.eq1 {
+  left: 0;
+  height: 13px;
+  animation: shortEq 0.5s infinite;
+}
+
+.eq2 {
+  left: 6px;
+  height: 15px;
+  animation: tallEq 0.5s 0.17s infinite;
+}
+
+.eq3 {
+  left: 12px;
+  height: 13px;
+  background-color: #00775b !important;
+  animation: shortEq 0.5s 0.34s infinite;
+}
+
+@keyframes shortEq {
+  0%,
+  100% {
+    height: 15px;
+  }
+
+  50% {
+    height: 10px;
+  }
+}
+
+@keyframes tallEq {
+  0%,
+  100% {
+    height: 20px;
+  }
+
+  50% {
+    height: 13px;
+  }
+}
+
+.playerCenter {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+}
+
+.playerButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  height: 100%;
+}
+
+.playerButtons button,
+.playerRight button {
+  width: 32px;
+  height: 32px;
+  color: var(--gray-color);
+  transition: color 0.18s ease;
+}
+
+.playerButtons button:hover,
+.playerRight button:hover,
+.playerRight .isToggled {
+  color: var(--green-color);
+}
+
+.playerRight .repeatButton {
+  position: relative;
+}
+
+.repeatBadge {
+  position: absolute;
+  right: -7px;
+  bottom: -5px;
+  display: inline-flex;
+  min-width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 1px solid rgba(0, 255, 179, 0.36);
+  background: rgba(0, 255, 179, 0.14);
+  color: var(--green-color);
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.playerRight .isRepeat-all .repeatBadge {
+  min-width: 22px;
+}
+
+.playerRight .micButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.playerRight .micButton:hover {
+  color: var(--green-color);
+  background: rgba(0, 255, 179, 0.08);
+}
+
+.playerRight .micButton.isActive {
+  color: var(--green-color);
+  background: rgba(0, 255, 179, 0.12);
+}
+
+.playerRight .micButton.isActive:hover {
+  background: rgba(0, 255, 179, 0.18);
+}
+
+.playerButtons .miniPlayButton {
+  position: relative;
+  z-index: 1;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: var(--white-color);
+  color: var(--green-color);
+  box-shadow: 0 0 30px rgba(21, 255, 146, 0.5);
+}
+
+.playerButtons .miniPlayButton svg {
+  color: var(--green-color);
+  stroke: var(--green-color);
+}
+
+.playerButtons .miniPlayButton .lucide-play polygon {
+  fill: var(--green-color);
+  stroke: var(--green-color);
+}
+
+.playerButtons .miniPlayButton::before {
+  position: absolute;
+  z-index: -2;
+  left: 50%;
+  top: 50%;
+  display: block;
+  width: 45px;
+  height: 45px;
+  content: "";
+  border-radius: 50%;
+  background: rgba(21, 255, 146, 0.65);
+  transform: translateX(-50%) translateY(-50%);
+  animation: pulseBorder 1500ms ease-out infinite;
+}
+
+.playerButtons .miniPlayButton:hover {
+  background: var(--white-color);
+  color: var(--green-color);
+}
+
+@keyframes pulseBorder {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-50%) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-50%) scale(1.5);
+  }
+}
+
+.seekRow {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 70px;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  color: var(--gray-color);
+}
+
+.seekRow span {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.playerRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  height: 100%;
+  padding-right: clamp(28px, 4vw, 70px);
+  color: var(--gray-color);
+}
+
+.volumeControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 110px;
+  color: var(--gray-color);
+}
+
+.volumeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.volumeToggle:hover {
+  color: var(--green-color);
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  outline: 0;
+  appearance: none;
+  background:
+    linear-gradient(90deg, var(--light-blue-color) var(--progress), var(--bg-color) 0);
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background-color: var(--light-blue-color);
+  box-shadow:
+    rgba(16, 223, 188, 0.3) 0 0 0 7px,
+    rgba(16, 223, 188, 0.65) 0 4px 6px -1px,
+    rgba(16, 223, 188, 0.08) 0 1px 0;
+}
+
+.volumeControl input[type="range"]::-webkit-slider-thumb {
+  background-color: var(--green-color);
+  box-shadow: none;
+}
+
+@media (max-width: 1040px) {
+  .topBar,
+  .pageGrid {
+    width: 100%;
+  }
+
+  .pageGrid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "lyrics"
+      "hero"
+      "list";
+  }
+
+  .lyricsStage {
+    gap: 30px;
+    padding: 64px 0 42px;
+  }
+
+  .songAction {
+    width: 320px;
+    flex-basis: 320px;
+  }
+
+  .discWrap {
+    width: 310px;
+    height: 310px;
+  }
+
+  .discWrap::after {
+    width: calc(100% - 10px);
+    height: calc(100% - 10px);
+  }
+
+  .playerBar {
+    grid-template-columns: minmax(180px, 26%) 1fr 150px;
+  }
+
+  .nowPlaying,
+  .songListPanel {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .miniSong {
+    padding-left: 16px;
+  }
+
+  .playerRight {
+    padding-right: 16px;
+  }
+
+  .volumeControl {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .appShell {
+    padding-bottom: 132px;
+  }
+
+  .topBar {
+    grid-template-columns: 1fr;
+    height: auto;
+    padding: 18px 0;
+  }
+
+  .searchWrap {
+    order: 2;
+  }
+
+  .searchResults {
+    max-height: min(360px, 70vh);
+  }
+
+  .searchResult {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .searchTag {
+    display: none;
+  }
+
+  .topBadge {
+    justify-self: start;
+    order: 3;
+  }
+
+  .lyricsPanel {
+    min-height: 0;
+    height: auto;
+  }
+
+  .topBar {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .lyricsStage {
+    display: block;
+    width: calc(100% - 28px);
+    padding: 28px 0 32px;
+  }
+
+  .songAction {
+    width: 100%;
+    text-align: center;
+  }
+
+  .discWrap {
+    width: min(270px, 72vw);
+    height: min(270px, 72vw);
+    margin: 0 auto;
+  }
+
+  .discWrap::after {
+    width: calc(100% - 10px);
+    height: calc(100% - 10px);
+  }
+
+  .lyricsBox {
+    height: 400px;
+    margin-top: 24px;
+    scroll-padding-block: 0;
+  }
+
+  .lyricsTrack {
+    padding: 0;
+  }
+
+  .lyricsBox .lyricLine,
+  .lyricsBox .lyricNotice,
+  .lyricsBox .lyricSpacer {
+    height: auto;
+    min-height: 76px;
+    padding: 0 8px;
+    font-size: clamp(1.35rem, 1.5vw, 1.6rem);
+    line-height: 1.2;
+  }
+
+  .nowPlayingTop {
+    grid-template-columns: 1fr;
+  }
+
+  .coverStack {
+    display: none;
+  }
+
+  .songHero {
+    text-align: center;
+  }
+
+  .eyebrow,
+  .tagRow,
+  .heroControls {
+    justify-content: center;
+  }
+
+  .heroControls {
+    display: none;
+  }
+
+  .songList {
+    grid-template-columns: 1fr;
+  }
+
+  .songRow {
+    grid-template-columns: 34px 48px minmax(0, 1fr);
+  }
+
+  .songTag {
+    display: none;
+  }
+
+  .playerBar {
+    grid-template-columns: 1fr;
+    height: 118px;
+    padding: 10px 14px;
+  }
+
+  .miniSong {
+    grid-template-columns: 24px 35px minmax(0, 1fr);
+    height: auto;
+    padding-left: 0;
+  }
+
+  .playerCenter {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .playerButtons {
+    height: auto;
+  }
+
+  .seekRow {
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+  }
+
+  .playerRight {
+    display: none;
+  }
+}
+
+/* ===== Extension side panel — full design, pixel-perfect ===== */
+
+/* === CSS variables (shadow of :root from full design) === */
+:root {
+  --bg-index: #0b1220;
+  --bg-color: #21324a;
+  --blue-color: #0e192a;
+  --gray-color: #afafaf;
+  --light-gray-color: #ececec;
+  --white-color: #fff;
+  --light-blue-color: #00e5ce;
+  --yellow-color: #ffff00;
+  --green-color: #00ffb3;
+  --green-btn-color: #00d8ad;
+  --bg-control: #111727;
+  --dark-color: #16181b;
+  --border-control: #0c1524;
+  --beta-color: rgba(244, 246, 248, 0.02);
+  --app-font: "Lexend", "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-index);
+  color: var(--white-color);
+  font-family: var(--app-font);
+  font-size: 0.9rem;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+html.viewLyrics {
+  overflow: hidden;
+}
+
+button, input {
+  font: inherit;
+  font-family: var(--app-font);
+  border: 0;
+}
+
+/* ===== App shell ===== */
+.appShell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding-bottom: 80px; /* equal to playerBar height */
+  background: var(--bg-index);
+}
+
+/* ===== Ambient background ===== */
+.ambientBg {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  overflow: hidden;
+  /* No background-color here: any painted background hides children with
+     negative z-index. The default banner <img> already serves as the
+     fallback when no custom image is set, and the ::after gradient sits
+     above it. */
+}
+
+.ambientBg::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(180deg, rgba(11, 18, 32, 0.35), var(--bg-index)),
+    linear-gradient(90deg, rgba(14, 25, 42, 0.95), rgba(14, 25, 42, 0.78));
+}
+
+.ambientBg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(40px);
+  opacity: 0.22;
+  transform: scale(1);
+}
+
+/* ===== Top bar — 75px, 3-column grid ===== */
+.topBar {
+  display: grid;
+  grid-template-columns: 180px minmax(320px, 560px) auto;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  height: 75px;
+  margin: 0;
+  padding: 0 clamp(18px, 4vw, 72px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.brand img {
+  width: 150px;
+  height: auto;
+  transform: scale(1);
+  transform-origin: center;
+}
+
+.searchWrap {
+  position: relative;
+  z-index: 20;
+  width: 100%;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.055)),
+    rgba(12, 20, 34, 0.76);
+  color: var(--gray-color);
+  opacity: 0.8;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.14);
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
+
+.searchBox.isFocused {
+  border-color: rgba(0, 255, 179, 0.45);
+  background:
+    linear-gradient(180deg, rgba(0, 255, 179, 0.12), rgba(255, 255, 255, 0.055)),
+    rgba(12, 20, 34, 0.94);
+  color: var(--green-color);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22), 0 0 0 3px rgba(0, 255, 179, 0.08);
+}
+
+.searchBox input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--white-color);
+  font-size: 0.92rem;
+  font-weight: 300;
+}
+
+.searchBox input::placeholder {
+  color: rgba(236, 236, 236, 0.68);
+  font-weight: 200;
+}
+
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+
+.searchClear:hover {
+  border-color: rgba(0, 255, 179, 0.32);
+  background: rgba(0, 255, 179, 0.1);
+  color: var(--green-color);
+}
+
+.searchResults {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  left: 0;
+  display: grid;
+  gap: 6px;
+  max-height: min(430px, calc(100vh - 94px));
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgba(0, 255, 179, 0.2);
+  background:
+    linear-gradient(180deg, rgba(16, 28, 46, 0.98), rgba(10, 17, 30, 0.98)),
+    var(--bg-index);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.searchResults::-webkit-scrollbar { display: none; }
+
+.searchResult {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--gray-color);
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.searchResult:hover, .searchResult.isCurrent {
+  border-color: rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.08);
+}
+
+.searchResult:hover { transform: translateY(-1px); }
+
+.searchResult img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  transform: scale(1);
+  transform-origin: center;
+}
+
+.searchResultMeta {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.searchResultMeta strong {
+  overflow: hidden;
+  color: var(--white-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.searchResultMeta small {
+  overflow: hidden;
+  color: var(--gray-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 300;
+}
+
+.searchTag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.08);
+  color: var(--green-color);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.searchEmpty {
+  padding: 18px 14px;
+  color: var(--gray-color);
+  font-size: 0.88rem;
+  font-weight: 300;
+  text-align: center;
+}
+
+.topBadge {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 255, 179, 0.28);
+  background: rgba(0, 255, 179, 0.08);
+  color: var(--green-color);
+  font-weight: 400;
+}
+
+/* ===== Main grid — 2-column desktop ===== */
+.pageGrid {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  align-self: stretch;
+  gap: 18px;
+  width: 100%;
+  margin: 0;
+  align-items: stretch;
+  padding-bottom: 20px;
+}
+
+.pageGrid .nowPlaying,
+.pageGrid .songListPanel {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ===== Lyrics panel — full width, disc + lyrics ===== */
+.lyricsPanel {
+  grid-area: lyrics;
+  position: relative;
+  min-height: 560px;
+  height: calc(100vh - 155px);
+  overflow: hidden;
+  background-color: var(--blue-color);
+}
+
+.lyricsBgImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(40px);
+  opacity: 0.55;
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.lyricsBgShade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(11, 18, 32, 0.72)),
+    rgba(0, 0, 0, 0.3);
+}
+
+.lyricsStage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: clamp(36px, 6vw, 80px);
+  width: 90%;
+  height: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: clamp(36px, 6vh, 72px) 0 clamp(36px, 6vh, 72px);
+}
+
+.songAction {
+  width: 400px;
+  flex: 0 0 400px;
+}
+
+.discWrap {
+  position: relative;
+  width: 380px;
+  height: 380px;
+}
+
+.discWrap::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  content: "";
+  border: 6px solid var(--light-gray-color);
+  border-radius: 50%;
+  background-color: var(--dark-color);
+  box-sizing: border-box;
+}
+
+.discWrap::after {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 1;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
+  content: "";
+  border-radius: 50%;
+  background-color: #000;
+  opacity: 0.12;
+}
+
+.discWrap img {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border: 5px solid var(--white-color);
+  border-radius: 50%;
+  object-fit: cover;
+  transform: rotate(var(--disc-rotate-angle, 0deg)) scale(1.5);
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+/* ===== Disc-reactive zoom + rotation (driven by src/utils/bassReactiveCover.js) =====
+   JS writes --bass / --bass-smooth / --avatar-pulse / --disc-rotate-angle
+   into .discWrap every animation frame:
+     .discWrap:       scale(1 + avatar-pulse * 0.16)           ← zoom pulse
+     .discWrap img:   rotate(angle) scale(1.5)                  ← JS-driven spin
+   The static scale(1.5) on the img hides the square cover corners inside
+   the circular discWrap (which has overflow: hidden). */
+.songAction .discWrap {
+  --bass: 0;
+  --bass-smooth: 0;
+  --avatar-pulse: 0;
+  transform: scale(calc(1 + var(--avatar-pulse, 0) * 0.16));
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.songAction .discWrap img {
+  will-change: transform, filter;
+  filter:
+    saturate(calc(1 + var(--avatar-pulse, 0) * 0.18))
+    contrast(calc(1 + var(--avatar-pulse, 0) * 0.08))
+    brightness(calc(1 + var(--avatar-pulse, 0) * 0.06))
+    blur(0.8px);
+}
+
+.lyricsColumn {
+  min-width: 0;
+  flex: 1;
+}
+
+.lyricsBox {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scroll-padding-block: 0;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  color: var(--light-gray-color);
+  -ms-overflow-style: none;
+}
+
+.lyricsBox::-webkit-scrollbar { display: none; }
+
+.lyricsBox.fixedLyricsWindow {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+}
+
+.lyricsTrack {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.lyricsBox .lyricLine,
+.lyricsBox .lyricNotice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  max-width: min(100%, 1160px);
+  height: auto;
+  min-height: 76px;
+  margin-inline: auto;
+  padding: 0 clamp(12px, 3vw, 36px);
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--light-gray-color);
+  cursor: pointer;
+  font-size: clamp(1.55rem, 1.85vw, 2rem);
+  font-weight: 500;
+  line-height: 1.2;
+  opacity: 0.45;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+  transform: scale(1) translateY(0);
+  transition:
+    color 420ms ease,
+    opacity 420ms ease,
+    font-weight 420ms ease,
+    font-size 420ms ease,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    text-shadow 420ms ease;
+  will-change: opacity, transform;
+  animation: lyricLineEnter 460ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lyricsBox .lyricLine:hover { color: var(--white-color); }
+
+.lyricsBox .activeLyric {
+  color: var(--yellow-color);
+  opacity: 1;
+  font-weight: 800;
+  text-shadow: 0 0 22px rgba(217, 221, 0, 0.28);
+  filter: brightness(1.12);
+  animation: lyricActiveEnter 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lyricsBox .lyricLine.empty {
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+  cursor: default;
+}
+
+.lyricsBox .lyricSpacer {
+  height: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.lyricsBox .lyricNotice {
+  cursor: default;
+  opacity: 1;
+}
+
+/* ===== Now Playing ===== */
+.nowPlaying,
+.songListPanel {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--beta-color);
+}
+
+.nowPlaying {
+  grid-area: hero;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 330px;
+  margin-left: clamp(18px, 4vw, 72px);
+  padding: 24px;
+  overflow: hidden;
+}
+
+.nowPlayingTop {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 24px 24px;
+}
+
+.weatherSlot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: stretch;
+  min-width: 0;
+  padding: 12px 18px 14px;
+}
+
+.nowPlayingBottom {
+  flex: 0 0 auto;
+  min-height: 0;
+  display: block;
+  text-align: center;
+  padding: 16px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.typingText {
+  font-weight: 300;
+  font-size: 16px;
+  letter-spacing: -0.3px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.typingText {
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.typingCursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  background: currentColor;
+  vertical-align: text-bottom;
+  animation: typingBlink 0.8s infinite;
+}
+
+@keyframes typingBlink {
+  0%, 45% {
+    opacity: 1;
+  }
+  46%, 100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .nowPlayingBottom {
+    padding: 10px 8px;
+  }
+  .typingText {
+    font-weight: 300;
+    font-size: 16px;
+    letter-spacing: -0.2px;
+  }
+}
+
+@media (max-width: 400px) {
+  /* Typing text gets too tight on very narrow phones; collapse it to keep the card calm. */
+  .nowPlayingBottom {
+    display: none;
+  }
+}
+
+/* ===== Weather widget (Open-Meteo) ===== */
+.weatherWidget {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 14px 20px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+  min-width: 0;
+}
+
+.weatherWidget .weatherIcon {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.weatherWidget .weatherMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.weatherWidget .weatherTemp {
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.weatherWidget .weatherLocation {
+  font-size: 0.78rem;
+  line-height: 1.3;
+  color: var(--text-muted, rgba(255, 255, 255, 0.62));
+  max-width: 220px;
+}
+
+.weatherWidget .weatherMeta {
+  margin-left: auto;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 14px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted, rgba(255, 255, 255, 0.62));
+  text-align: right;
+  min-width: 0;
+}
+
+.weatherWidget .weatherMeta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+@media (max-width: 720px) {
+  .weatherWidget {
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  .weatherWidget .weatherMeta {
+    gap: 4px 10px;
+    font-size: 0.72rem;
+  }
+  .weatherWidget .weatherMeta span {
+    max-width: 130px;
+  }
+  .weatherWidget .weatherLocation {
+    max-width: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .weatherWidget .weatherMeta {
+    /* Hide detailed meta on very narrow phones — temp + location stay visible */
+    display: none;
+  }
+}
+
+.coverStack {
+  --glitch-primary: #00ffd5;
+  --glitch-secondary: #ff3764;
+  --glitch-bg: #000000;
+  position: relative;
+  align-self: start;
+  aspect-ratio: 1;
+  overflow: hidden;
+  width: 100%;
+  background: var(--glitch-bg);
+  box-shadow: 0 22px 44px rgba(0, 0, 0, 0.35);
+  isolation: isolate;
+}
+
+.coverBase,
+.coverGlow,
+.coverRed,
+.coverCyan,
+.coverBands,
+.coverFrags,
+.coverScan,
+.coverNoise {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.coverBase {
+  z-index: 1;
+  object-fit: cover;
+  animation: coverShake 4.6s infinite steps(1, end);
+}
+
+.coverGlow {
+  z-index: 2;
+  object-fit: cover;
+  filter: blur(14px);
+  opacity: 0.5;
+  transform: translateY(10px) scale(0.9);
+  animation: none;
+}
+
+.coverRed,
+.coverCyan {
+  opacity: 0;
+  object-fit: cover;
+  mix-blend-mode: screen;
+}
+
+.coverRed {
+  z-index: 2;
+  filter: drop-shadow(-2px 0 var(--glitch-secondary));
+  animation: coverGhostRed 4.6s infinite steps(1, end);
+}
+
+.coverCyan {
+  z-index: 2;
+  filter: drop-shadow(2px 0 var(--glitch-primary));
+  animation: coverGhostCyan 4.6s infinite steps(1, end);
+}
+
+/* Bands — horizontal glitch strips */
+.coverBands {
+  z-index: 4;
+  overflow: hidden;
+}
+
+.coverBand {
+  position: absolute;
+  left: -3%;
+  width: 106%;
+  overflow: hidden;
+  opacity: 0;
+  background: rgba(4, 12, 18, 0.55);
+  animation: coverBandFlash 4.2s infinite steps(1, end);
+}
+
+.coverBand img {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+  opacity: 0.64;
+  filter: contrast(1.18) saturate(1.12);
+}
+
+.coverBand.b1 { top: 6%;  height: 10px; animation-delay: 0s;   transform: translateX(-7px); }
+.coverBand.b1 img { top: -19px;  transform: translateX(8px); }
+
+.coverBand.b2 { top: 15%; height: 8px;  animation-delay: 0.05s; transform: translateX(9px); }
+.coverBand.b2 img { top: -48px;  transform: translateX(-10px); }
+
+.coverBand.b3 { top: 24%; height: 12px; animation-delay: 0.10s; transform: translateX(-10px); }
+.coverBand.b3 img { top: -77px;  transform: translateX(12px); }
+
+.coverBand.b4 { top: 35%; height: 9px;  animation-delay: 0.15s; transform: translateX(6px); }
+.coverBand.b4 img { top: -112px; transform: translateX(-8px); }
+
+.coverBand.b5 { top: 46%; height: 14px; animation-delay: 0.20s; transform: translateX(-12px); }
+.coverBand.b5 img { top: -147px; transform: translateX(14px); }
+
+.coverBand.b6 { top: 58%; height: 9px;  animation-delay: 0.25s; transform: translateX(8px); }
+.coverBand.b6 img { top: -186px; transform: translateX(-10px); }
+
+.coverBand.b7 { top: 70%; height: 11px; animation-delay: 0.30s; transform: translateX(-6px); }
+.coverBand.b7 img { top: -224px; transform: translateX(8px); }
+
+.coverBand.b8 { top: 83%; height: 8px;  animation-delay: 0.35s; transform: translateX(7px); }
+.coverBand.b8 img { top: -266px; transform: translateX(-7px); }
+
+/* Pixel / data fragments */
+.coverFrags {
+  z-index: 5;
+}
+
+.coverFrag {
+  position: absolute;
+  height: 4px;
+  opacity: 0;
+  background:
+    linear-gradient(90deg,
+      transparent 0 10%,
+      #00ffd5 10% 20%,
+      transparent 20% 30%,
+      rgba(255, 55, 120, 0.95) 30% 40%,
+      transparent 40% 56%,
+      #00ffd5 56% 64%,
+      transparent 64% 100%);
+  mix-blend-mode: screen;
+  animation: coverFragBlink 4.2s infinite steps(1, end);
+}
+
+.coverFrag.f1 { top: 8%;   left: 8%;   width: 58px;  animation-delay: 0.02s; }
+.coverFrag.f2 { top: 16%;  right: 8%;  width: 40px;  animation-delay: 0.07s; }
+.coverFrag.f3 { top: 26%;  left: 5%;   width: 76px;  animation-delay: 0.12s; }
+.coverFrag.f4 { top: 36%;  right: 12%; width: 64px;  animation-delay: 0.16s; }
+.coverFrag.f5 { top: 47%;  left: 4%;   width: 96px;  animation-delay: 0.21s; }
+.coverFrag.f6 { top: 59%;  right: 7%;  width: 54px;  animation-delay: 0.26s; }
+.coverFrag.f7 { top: 71%;  left: 16%;  width: 66px;  animation-delay: 0.31s; }
+.coverFrag.f8 { top: 84%;  right: 18%; width: 52px;  animation-delay: 0.36s; }
+
+/* Scan lines overlay */
+.coverScan {
+  z-index: 6;
+  opacity: 0.18;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.025) 0,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+  mix-blend-mode: overlay;
+}
+
+/* Noise dots */
+.coverNoise {
+  z-index: 7;
+  opacity: 0.035;
+  background:
+    repeating-radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1px 4px);
+  animation: coverNoiseMove 0.5s infinite steps(2, end);
+}
+
+/* ---- Animations ---- */
+
+@keyframes coverShake {
+  0%, 100% { transform: translate(0);     filter: none; }
+  10% { transform: translate(-1px, 0);   filter: contrast(1.04); }
+  11% { transform: translate(1px, 0); }
+  12% { transform: translate(0);        filter: none; }
+  48% { transform: translate(1px, -1px); filter: brightness(1.03); }
+  49% { transform: translate(0);         filter: none; }
+  76% { transform: translate(-1px, 1px); }
+  77% { transform: translate(0); }
+}
+
+@keyframes coverGhostRed {
+  0%, 100% { opacity: 0;   transform: translateX(0); }
+  10% { opacity: 0.18; transform: translateX(-1px); }
+  12% { opacity: 0;    transform: translateX(0); }
+  48% { opacity: 0.12; transform: translateX(-1px); }
+  49% { opacity: 0;    transform: translateX(0); }
+  76% { opacity: 0.10; transform: translateX(-1px); }
+  77% { opacity: 0;    transform: translateX(0); }
+}
+
+@keyframes coverGhostCyan {
+  0%, 100% { opacity: 0;   transform: translateX(0); }
+  10% { opacity: 0.15; transform: translateX(1px); }
+  12% { opacity: 0;    transform: translateX(0); }
+  48% { opacity: 0.11; transform: translateX(1px); }
+  49% { opacity: 0;    transform: translateX(0); }
+  76% { opacity: 0.09; transform: translateX(1px); }
+  77% { opacity: 0;    transform: translateX(0); }
+}
+
+@keyframes coverBandFlash {
+  0%, 100% { opacity: 0; }
+  10% { opacity: 0.95; }
+  11% { opacity: 0.40; }
+  12% { opacity: 0.80; }
+  13% { opacity: 0; }
+  48% { opacity: 0.65; }
+  49% { opacity: 0; }
+  76% { opacity: 0.52; }
+  77% { opacity: 0; }
+}
+
+@keyframes coverFragBlink {
+  0%, 100% { opacity: 0;   transform: translateX(0); }
+  10% { opacity: 0.95; transform: translateX(8px); }
+  11% { opacity: 0.40; transform: translateX(-5px); }
+  12% { opacity: 0.75; transform: translateX(2px); }
+  13% { opacity: 0;    transform: translateX(0); }
+  48% { opacity: 0.55; transform: translateX(-6px); }
+  49% { opacity: 0;    transform: translateX(0); }
+  76% { opacity: 0.42; transform: translateX(4px); }
+  77% { opacity: 0;    transform: translateX(0); }
+}
+
+@keyframes coverNoiseMove {
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(4%, -3%); }
+}
+
+.songHero {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.emptyPlayer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.emptyPlayer .emptyPlayerIcon {
+  font-size: 4rem;
+  line-height: 1;
+  color: var(--green-color);
+  opacity: 0.55;
+}
+
+.emptyPlayer h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  font-weight: 700;
+  color: var(--white-color);
+  opacity: 0.85;
+}
+
+.miniSongEmpty .miniSongPlaceholder {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: var(--green-color);
+  font-size: 1.25rem;
+}
+
+.miniSongEmpty strong {
+  opacity: 0.7;
+}
+
+.miniSongEmpty span:last-child {
+  opacity: 0.5;
+}
+
+.eyebrow,
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--green-color);
+  font-weight: 400;
+}
+
+.eyebrow {
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.songHero h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(2.16rem, 4vw, 4.4rem);
+  line-height: 1;
+  font-weight: 700;
+}
+
+.artistName {
+  margin-top: 12px;
+  color: var(--gray-color);
+  font-size: 1rem;
+  font-weight: 300;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.tagRow span,
+.songTag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.08);
+  color: var(--green-color);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.liveLyric {
+  min-height: 50px;
+  margin: 22px 0 0;
+  color: var(--yellow-color);
+  font-size: 1.05rem;
+  font-weight: 300;
+  line-height: 1.45;
+}
+
+.heroControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.ghostButton,
+.playButton,
+.playerButtons button,
+.playerRight button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--white-color);
+  background: transparent;
+}
+
+.ghostButton {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.playButton {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--white-color);
+  color: var(--green-btn-color);
+  box-shadow: 0 0 30px rgba(21, 255, 146, 0.5);
+}
+
+/* ===== Song list ===== */
+.songListPanel {
+  grid-area: list;
+  display: flex;
+  flex-direction: column;
+  margin-right: clamp(18px, 4vw, 72px);
+  padding: 22px;
+}
+
+.sectionTitle {
+  margin-bottom: 16px;
+}
+
+.sectionTitle h2 {
+  flex: 1;
+  color: var(--white-color);
+  font-size: 1.3rem;
+  font-weight: 500;
+}
+
+.songList {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.songList::-webkit-scrollbar { display: none; }
+
+.songRow {
+  display: grid;
+  grid-template-columns: 34px 50px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 80px;
+  padding: 15px;
+  border: 0;
+  background: var(--beta-color);
+  color: var(--gray-color);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s;
+  overflow: hidden;
+}
+
+.songRow:hover,
+.songRow.isActive {
+  background-color: var(--bg-color);
+  opacity: 0.8;
+}
+
+.songRow:hover .songMeta strong,
+.songRow.isActive .songMeta strong {
+  color: var(--green-color);
+}
+
+.rowIndex {
+  color: var(--yellow-color);
+  font-weight: 400;
+  text-align: center;
+}
+
+.rowCover {
+  display: inline-block;
+  width: 50px;
+  height: 50px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rowCover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.songMeta {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.songMeta strong,
+.miniSong strong {
+  overflow: hidden;
+  color: var(--white-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.songMeta small,
+.miniSong span {
+  overflow: hidden;
+  color: var(--gray-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 300;
+}
+
+/* ===== Player bar ===== */
+.playerBar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 20% 60% 20%;
+  align-items: center;
+  width: 100%;
+  height: 80px;
+  border-top: 2px solid var(--border-control);
+  background-color: var(--bg-control);
+  background-image: linear-gradient(90deg, var(--bg-color), var(--bg-control));
+  color: var(--white-color);
+  font-size: 0.8rem;
+  overflow: hidden;
+}
+
+.miniSong {
+  display: grid;
+  grid-template-columns: 30px 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+  min-width: 0;
+  height: 100%;
+  padding-left: 5vw;
+  overflow: hidden;
+}
+
+.miniCover {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.miniCover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.4);
+  transform-origin: center;
+}
+
+.miniSong div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.miniEqualizer {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 24px;
+}
+
+.miniEqualizer.isActive { opacity: 1; }
+
+.miniEqualizer span {
+  position: absolute;
+  bottom: 0;
+  display: inline-block;
+  width: 4px;
+  background-color: var(--green-color);
+}
+
+.eq1 { left: 0; height: 13px; animation: shortEq 0.5s infinite; }
+.eq2 { left: 6px; height: 15px; animation: tallEq 0.5s 0.17s infinite; }
+.eq3 { left: 12px; height: 13px; background-color: #00775b !important; animation: shortEq 0.5s 0.34s infinite; }
+
+@keyframes shortEq {
+  0%, 100% { height: 15px; }
+  50% { height: 10px; }
+}
+@keyframes tallEq {
+  0%, 100% { height: 20px; }
+  50% { height: 13px; }
+}
+
+.playerCenter {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+}
+
+.playerButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  height: 100%;
+}
+
+.playerButtons button,
+.playerRight button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--gray-color);
+  background: transparent;
+  transition: color 0.18s ease;
+}
+
+.playerButtons button:hover,
+.playerRight button:hover,
+.playerRight .isToggled {
+  color: var(--green-color);
+}
+
+.playerRight .repeatButton { position: relative; }
+
+.repeatBadge {
+  position: absolute;
+  right: -7px;
+  bottom: -5px;
+  display: inline-flex;
+  min-width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 1px solid rgba(0, 255, 179, 0.36);
+  background: rgba(0, 255, 179, 0.14);
+  color: var(--green-color);
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.playerRight .isRepeat-all .repeatBadge { min-width: 22px; }
+
+.playerRight .micButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+}
+
+.playerRight .micButton:hover {
+  color: var(--green-color);
+  background: rgba(0, 255, 179, 0.08);
+}
+
+.playerRight .micButton.isActive {
+  color: var(--green-color);
+  background: rgba(0, 255, 179, 0.12);
+}
+
+.playerRight .micButton.isActive:hover {
+  background: rgba(0, 255, 179, 0.18);
+}
+
+.playerButtons .miniPlayButton {
+  position: relative;
+  z-index: 1;
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background: var(--white-color);
+  color: var(--green-color);
+  box-shadow: 0 0 30px rgba(21, 255, 146, 0.5);
+}
+
+.playerButtons .miniPlayButton::before {
+  position: absolute;
+  z-index: -2;
+  left: 50%;
+  top: 50%;
+  display: block;
+  width: 45px;
+  height: 45px;
+  content: "";
+  border-radius: 50%;
+  background: rgba(21, 255, 146, 0.65);
+  transform: translate(-50%, -50%);
+  animation: pulseBorder 1500ms ease-out infinite;
+}
+
+.playerButtons .miniPlayButton:hover {
+  background: var(--white-color);
+  color: var(--green-color);
+}
+
+@keyframes pulseBorder {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+}
+
+.seekRow {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 70px;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  color: var(--gray-color);
+}
+
+.seekRow span {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.playerRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  height: 100%;
+  padding-right: clamp(28px, 4vw, 70px);
+  color: var(--gray-color);
+}
+
+.volumeControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 110px;
+  color: var(--gray-color);
+}
+
+.volumeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: color 0.18s ease;
+}
+
+.volumeToggle:hover {
+  color: var(--green-color);
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  outline: 0;
+  appearance: none;
+  background: linear-gradient(90deg, var(--light-blue-color) var(--progress), var(--bg-color) 0);
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background: var(--light-blue-color);
+  box-shadow:
+    rgba(16, 223, 188, 0.3) 0 0 0 7px,
+    rgba(16, 223, 188, 0.65) 0 4px 6px -1px,
+    rgba(16, 223, 188, 0.08) 0 1px 0;
+}
+
+.volumeControl input[type="range"]::-webkit-slider-thumb {
+  background: var(--green-color);
+  box-shadow: none;
+}
+
+/* ===== Responsive: tablet (≤1040px) — 1 column ===== */
+@media (max-width: 1040px) {
+  .topBar,
+  .pageGrid {
+    width: 100%;
+  }
+
+  .pageGrid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "lyrics"
+      "hero"
+      "list";
+  }
+
+  .lyricsStage {
+    gap: 30px;
+    padding: 64px 0 42px;
+  }
+
+  .songAction {
+    width: 320px;
+    flex-basis: 320px;
+  }
+
+  .discWrap {
+    width: 310px;
+    height: 310px;
+  }
+
+  .playerBar {
+    grid-template-columns: minmax(180px, 26%) 1fr 150px;
+  }
+
+  .nowPlaying,
+  .songListPanel {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .miniSong {
+    padding-left: 16px;
+  }
+
+  .playerRight {
+    padding-right: 16px;
+  }
+
+  .volumeControl {
+    display: none;
+  }
+}
+
+/* ===== Extension side panel overrides — for ~360px side panel ===== */
+/* These override mobile (≤720px) defaults with precise panel-space dimensions */
+
+@media (max-width: 720px) {
+  .appShell {
+    padding-bottom: 80px;
+  }
+
+  .topBar {
+    grid-template-columns: auto 1fr auto;
+    height: 52px;
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .brand img { width: 90px; }
+
+  .searchBox {
+    height: 36px;
+    padding: 0 10px 0 12px;
+    gap: 8px;
+  }
+
+  .searchBox input {
+    height: 34px;
+    font-size: 0.8rem;
+  }
+
+  .searchClear {
+    width: 18px;
+    height: 18px;
+  }
+
+  .searchResults {
+    max-height: 220px;
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .searchResult {
+    grid-template-columns: 34px 1fr auto;
+    min-height: 44px;
+    padding: 5px 7px;
+    gap: 7px;
+  }
+
+  .searchResult img { width: 34px; height: 34px; }
+  .searchResultMeta strong { font-size: 0.78rem; }
+  .searchResultMeta small { font-size: 0.68rem; }
+  .searchTag { display: none; }
+
+  .topBadge {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+  }
+
+  /* Page grid: vertical stack optimized for 360px panel */
+  .pageGrid {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  /* Lyrics panel — scaled for panel width */
+  .lyricsPanel {
+    flex-shrink: 0;
+    height: 260px;
+    min-height: 0;
+  }
+
+  .lyricsBgImage { filter: blur(24px); opacity: 0.45; }
+
+  .lyricsStage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 8px;
+    box-sizing: border-box;
+  }
+
+  .songAction {
+    width: 120px;
+    flex-basis: 120px;
+    flex-shrink: 0;
+  }
+
+  .discWrap {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto;
+  }
+
+  .discWrap::before {
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border-width: 2px;
+  }
+
+  .discWrap::after { display: none; }
+
+  .discWrap img { border-width: 3px; }
+
+  .lyricsColumn {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .lyricsBox {
+    flex: 1;
+    height: 400px;
+    min-height: 0;
+    max-height: none;
+    margin-top: 0;
+  }
+
+  .lyricsBox .lyricLine,
+  .lyricsBox .lyricNotice,
+  .lyricsBox .lyricSpacer {
+    height: auto;
+    min-height: 76px !important;
+    font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+    line-height: 1.2;
+    padding: 0 10px;
+  }
+
+  /* Now Playing */
+  .nowPlayingTop {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    padding: 10px 8px;
+  }
+  .coverStack { width: 70px; height: 70px; }
+  .coverGlow { display: none; }
+  .coverArt { box-shadow: 0 4px 12px rgba(0,0,0,0.3); border-radius: 4px; }
+
+  .eyebrow {
+    font-size: 0.7rem;
+    margin-bottom: 4px;
+  }
+
+  .songHero { justify-content: center; }
+
+  .songHero h2 {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artistName {
+    font-size: 0.75rem;
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tagRow { display: none; }
+
+  .liveLyric {
+    margin-top: 6px;
+    min-height: 0;
+    max-height: 32px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  /* Song list */
+  .songListPanel {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+  }
+
+  .sectionTitle {
+    margin-bottom: 6px;
+  }
+
+  .sectionTitle h2 { font-size: 0.85rem; }
+
+  .songList {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 4px;
+    align-content: start;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .songList::-webkit-scrollbar { display: none; }
+
+  /* ===== View modes ===== */
+  .pageGrid.view-list {
+    display: flex;
+    gap: 18px;
+    width: 100%;
+    margin: 0;
+  }
+
+  .pageGrid.view-list .nowPlaying {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pageGrid.view-list .songListPanel {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .pageGrid.view-list .lyricsPanel {
+    display: none;
+  }
+
+  .pageGrid.view-lyrics {
+    display: flex;
+    gap: 18px;
+    width: 100%;
+    margin: 0;
+  }
+
+  .pageGrid.view-lyrics .lyricsPanel {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .pageGrid.view-lyrics .nowPlaying,
+  .pageGrid.view-lyrics .songListPanel {
+    display: none;
+  }
+
+  /* Panel view modes */
+  @media (max-width: 720px) {
+    .pageGrid.view-list {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      gap: 6px;
+      padding: 0 10px;
+    }
+
+    .pageGrid.view-list .nowPlaying {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-height: 0;
+      padding: 10px 8px;
+    }
+    .pageGrid.view-list .nowPlayingTop {
+      display: grid;
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 10px;
+      padding: 0;
+    }
+
+    .pageGrid.view-list .songListPanel {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
+    }
+
+    .pageGrid.view-lyrics {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      gap: 6px;
+      padding: 0 10px;
+    }
+
+    .pageGrid.view-lyrics .lyricsPanel {
+      flex-shrink: 0;
+      height: 260px;
+    }
+
+    .pageGrid.view-lyrics .nowPlaying {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-height: 0;
+      padding: 10px 8px;
+    }
+    .pageGrid.view-lyrics .nowPlayingTop {
+      display: grid;
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 10px;
+      padding: 0;
+    }
+
+    .pageGrid.view-lyrics .songListPanel {
+      display: none;
+    }
+  }
+
+  .songRow {
+    display: grid;
+    grid-template-columns: 22px 36px 1fr auto;
+    gap: 8px;
+    min-height: 56px;
+    padding: 8px 8px;
+  }
+
+  .rowCover { width: 36px; height: 36px; }
+  .rowIndex { font-size: 0.68rem; }
+  .songMeta strong { font-size: 0.78rem; }
+  .songMeta small { font-size: 0.7rem; }
+  .songTag { display: none; }
+
+  /* Player bar */
+  .playerBar {
+    grid-template-columns: 22% 56% 22%;
+    height: 72px;
+    padding: 0 8px;
+    gap: 0;
+  }
+
+  .miniSong {
+    grid-template-columns: 16px 36px 1fr;
+    gap: 8px;
+    padding-left: 6px;
+  }
+
+  .miniCover { width: 36px; height: 36px; }
+  .miniSong strong { font-size: 0.75rem; }
+  .miniSong span { font-size: 0.7rem; }
+
+  .miniEqualizer { display: none; }
+
+  .playerCenter {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 0 6px;
+  }
+
+  .playerButtons {
+    height: auto;
+    gap: 10px;
+  }
+
+  .playerButtons button { width: 24px; height: 24px; }
+
+  .playerButtons .miniPlayButton {
+    width: 36px;
+    height: 36px;
+  }
+
+  .playerButtons .miniPlayButton::before {
+    width: 36px;
+    height: 36px;
+  }
+
+  .seekRow {
+    grid-template-columns: 36px 1fr 36px;
+    gap: 2px;
+  }
+
+  .seekRow span { font-size: 0.65rem; }
+
+  .playerRight {
+    gap: 8px;
+    padding-right: 6px;
+  }
+
+  .playerRight button { width: 26px; height: 26px; }
+
+  .playerRight .micButton { width: 26px; height: 26px; }
+
+  .volumeToggle { width: 26px; height: 26px; }
+
+  .volumeControl { width: 70px; gap: 4px; }
+}
+
+/* ===== Original mobile overrides — preserved for reference ===== */
+
+
+
+/* ===== Add Song (button + modal) ===== */
+.topBarActions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topBadgeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 255, 179, 0.32);
+  background: rgba(0, 255, 179, 0.1);
+  color: var(--green-color);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.topBadgeButton:hover {
+  background: rgba(0, 255, 179, 0.16);
+  border-color: rgba(0, 255, 179, 0.55);
+  box-shadow: 0 0 0 3px rgba(0, 255, 179, 0.08);
+}
+
+.topBadgeButton:focus-visible {
+  outline: none;
+  border-color: var(--green-color);
+  box-shadow: 0 0 0 3px rgba(0, 255, 179, 0.18);
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 10, 20, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.modalCard {
+  width: min(540px, 100%);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 255, 179, 0.25);
+  background:
+    linear-gradient(180deg, rgba(16, 28, 46, 0.98), rgba(10, 17, 30, 0.98)),
+    var(--bg-index);
+  color: var(--white-color);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modalHeader h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 500;
+  color: var(--green-color);
+}
+
+.modalClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gray-color);
+  cursor: pointer;
+  transition: color 0.18s ease, border-color 0.18s ease;
+}
+
+.modalClose:hover {
+  color: var(--green-color);
+  border-color: rgba(0, 255, 179, 0.4);
+}
+
+.modalBody {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  overflow: auto;
+}
+
+.modalField {
+  display: grid;
+  gap: 6px;
+}
+
+.modalField > span {
+  font-size: 0.78rem;
+  color: var(--gray-color);
+  font-weight: 300;
+}
+
+.modalField input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(12, 20, 34, 0.76);
+  color: var(--white-color);
+  font: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.modalField input:focus {
+  border-color: rgba(0, 255, 179, 0.45);
+  box-shadow: 0 0 0 3px rgba(0, 255, 179, 0.1);
+}
+
+.modalField input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modalFieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modalStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 255, 179, 0.22);
+  border-radius: 8px;
+  background: rgba(0, 255, 179, 0.06);
+  color: var(--green-color);
+  font-size: 0.85rem;
+  font-weight: 300;
+}
+
+.modalStatus.isError {
+  border-color: rgba(255, 99, 122, 0.45);
+  background: rgba(255, 99, 122, 0.08);
+  color: #ff8b97;
+}
+
+.modalSpinner {
+  animation: modalSpin 1s linear infinite;
+}
+
+@keyframes modalSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.modalLog {
+  max-height: 160px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--light-gray-color);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow: auto;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modalButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.modalButton.primary {
+  border-color: rgba(0, 255, 179, 0.5);
+  background: rgba(0, 255, 179, 0.18);
+  color: var(--green-color);
+}
+
+.modalButton.primary:hover {
+  background: rgba(0, 255, 179, 0.28);
+}
+
+.modalButton.primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.modalButton.ghost {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: var(--gray-color);
+}
+
+.modalButton.ghost:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--white-color);
+}
+
+/* ── LRC folder selector ──────────────────────────────────────────── */
+.modalLrcFolder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.83rem;
+}
+
+.modalLrcFolderLabel {
+  flex: 1;
+}
+
+.modalLrcFolderOk {
+  color: #00ffb3;
+}
+
+.modalLrcFolderMissing {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.modalLrcFolderBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid rgba(0, 255, 179, 0.28);
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(0, 255, 179, 0.8);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.modalLrcFolderBtn:hover:not(:disabled) {
+  background: rgba(0, 255, 179, 0.1);
+  border-color: rgba(0, 255, 179, 0.55);
+  color: #00ffb3;
+}
+
+.modalLrcFolderBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.modalLrcWarning {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  border-radius: 8px;
+  background: rgba(255, 193, 7, 0.07);
+  color: #ffc107;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.modalLrcWarning button {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  border-radius: 5px;
+  background: transparent;
+  color: #ffc107;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.modalLrcWarning button:hover {
+  background: rgba(255, 193, 7, 0.12);
+}
+
+@media (max-width: 720px) {
+  .topBarActions {
+    justify-self: start;
+    order: 3;
+    flex-wrap: wrap;
+  }
+
+  .modalFieldRow {
+    grid-template-columns: 1fr;
+  }
+
+  .modalOverlay {
+    padding: 12px;
+  }
+}
+
+
+/* ── Song context menu (right-click) ─────────────────────────────────────── */
+
+.songContextMenu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 200px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(8, 14, 26, 0.96);
+  border: 1px solid rgba(0, 255, 179, 0.28);
+  border-radius: 10px;
+  box-shadow:
+    0 18px 38px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 255, 179, 0.05) inset;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: #ececec;
+  font-family: inherit;
+  user-select: none;
+  animation: songContextMenuIn 0.12s ease-out;
+}
+
+@keyframes songContextMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.songContextMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #ececec;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.songContextMenuItem:hover {
+  background: rgba(0, 255, 179, 0.12);
+  color: #ffffff;
+}
+
+.songContextMenuItem:focus-visible {
+  outline: 2px solid rgba(0, 255, 179, 0.55);
+  outline-offset: -2px;
+}
+
+.songContextMenuItem.isDanger {
+  color: #ff8b8b;
+}
+
+.songContextMenuItem.isDanger:hover {
+  background: rgba(255, 75, 75, 0.14);
+  color: #ffb3b3;
+}
+
+.songContextMenuItem svg.isFav {
+  fill: #ff5e9c;
+  color: #ff5e9c;
+}
+
+.songContextMenuNote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(236, 236, 236, 0.55);
+  font-size: 12px;
+  font-style: italic;
+}
+
+
+/* ===== Settings (theme + custom background) ===== */
+
+/* Theme tokens — applied via [data-theme="dark|light"] on <html>. */
+:root[data-theme="dark"] {
+  --bg-main: #0b1220;
+  --bg-card: rgba(18, 18, 24, 0.88);
+  --bg-overlay: rgba(7, 11, 22, 0.55);
+  --text-main: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.65);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --card-tint: rgba(255, 255, 255, 0.03);
+  --hover-tint: rgba(0, 255, 179, 0.08);
+}
+
+:root[data-theme="light"] {
+  --bg-main: #f4f5f7;
+  --bg-card: rgba(255, 255, 255, 0.86);
+  --bg-overlay: rgba(255, 255, 255, 0.55);
+  --text-main: #0f1115;
+  --text-muted: rgba(15, 17, 21, 0.62);
+  --border-color: rgba(15, 17, 21, 0.12);
+  --card-tint: rgba(15, 17, 21, 0.04);
+  --hover-tint: rgba(0, 184, 130, 0.14);
+}
+
+/* Light mode — recolor hardcoded theme components that were authored for dark. */
+.theme-light .appShell,
+.theme-light body {
+  color: var(--text-main);
+  background-color: var(--bg-main);
+}
+
+.theme-light .ambientBg {
+  background: var(--bg-main);
+}
+
+.theme-light .ambientBg::after {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.25), var(--bg-main)),
+    linear-gradient(90deg, rgba(244, 245, 247, 0.95), rgba(244, 245, 247, 0.85));
+}
+
+.theme-light .ambientBg img {
+  opacity: 0.18;
+}
+
+.theme-light .lyricsBgShade {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(244, 245, 247, 0.65)),
+    rgba(255, 255, 255, 0.3);
+}
+
+.theme-light .lyricsBox {
+  color: rgba(15, 17, 21, 0.78);
+}
+
+/* ===== Song library popover (anchored under .topBadge) ===== */
+.songLibraryPopover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(540px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 17, 21, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+  overflow: hidden;
+}
+
+.songLibraryHeader {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.songLibrarySearch {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 12px 0;
+  padding: 0 8px 0 28px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.songLibrarySearch:focus-within {
+  border-color: rgba(0, 255, 179, 0.55);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.songLibrarySearchIcon {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted, rgba(255, 255, 255, 0.55));
+  pointer-events: none;
+}
+
+.songLibrarySearchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.songLibrarySearchInput::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.songLibrarySearchInput::placeholder {
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+}
+
+.songLibrarySearchClear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  color: var(--text-muted, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.songLibrarySearchClear:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-main, rgba(255, 255, 255, 0.92));
+}
+
+.songLibraryRowMark {
+  background: rgba(0, 255, 179, 0.22);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.songLibraryHint {
+  margin: 8px 12px 0;
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--text-muted, rgba(255, 255, 255, 0.55));
+}
+
+.songLibraryTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.songLibraryCount {
+  font-size: 0.7rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  font-weight: 400;
+}
+
+.songLibraryClose {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.songLibraryClose:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.songLibraryScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.songLibraryScroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.songLibraryScroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+}
+
+.songLibraryGroup {
+  padding: 6px 8px 4px;
+}
+
+.songLibraryGroup + .songLibraryGroup {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.songLibraryGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.songLibraryGroupFavorites .songLibraryGroupHeader {
+  color: rgba(255, 110, 170, 0.95);
+}
+
+.songLibraryGroupCount {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.55));
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.songLibraryTag {
+  font-weight: 500;
+}
+
+.songLibraryList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.songLibraryRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.songLibraryRow:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.songLibraryRow.isActive {
+  background: rgba(0, 255, 179, 0.12);
+  border-color: rgba(0, 255, 179, 0.32);
+  color: var(--green-color, #00ffb3);
+}
+
+.songLibraryRowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.songLibraryRowMain strong {
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.songLibraryRowMain small {
+  font-size: 0.7rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.songLibraryRowTag {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.65));
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.songLibraryEmpty {
+  margin: 16px 12px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
+
+/* Make the topBadge act as a toggle button without losing its pill look */
+.topBadgeButton {
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.topBadgeButton:hover {
+  background: rgba(0, 255, 179, 0.14);
+  border-color: rgba(0, 255, 179, 0.45);
+}
+
+.topBadgeButton:focus-visible {
+  outline: none;
+  border-color: rgba(0, 255, 179, 0.7);
+  box-shadow: 0 0 0 2px rgba(0, 255, 179, 0.25);
+}
+
+.topBarActions {
+  position: relative;
+}
+
+@media (max-width: 480px) {
+  .songLibraryPopover {
+    width: min(320px, calc(100vw - 24px));
+    max-height: min(420px, calc(100vh - 96px));
+  }
+}
+
+.theme-light .songLibraryPopover {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(15, 17, 21, 0.12);
+  color: rgba(15, 17, 21, 0.92);
+  box-shadow: 0 16px 40px rgba(15, 17, 21, 0.18);
+}
+
+.theme-light .songLibraryHeader {
+  border-bottom-color: rgba(15, 17, 21, 0.1);
+}
+
+.theme-light .songLibraryScroll::-webkit-scrollbar-thumb {
+  background: rgba(15, 17, 21, 0.18);
+}
+
+.theme-light .songLibraryGroup + .songLibraryGroup {
+  border-top-color: rgba(15, 17, 21, 0.08);
+}
+
+.theme-light .songLibraryGroupHeader,
+.theme-light .songLibraryGroupCount,
+.theme-light .songLibraryRowMain small,
+.theme-light .songLibraryRowTag,
+.theme-light .songLibraryEmpty {
+  color: rgba(15, 17, 21, 0.6);
+}
+
+.theme-light .songLibraryRow:hover {
+  background: rgba(15, 17, 21, 0.05);
+  border-color: rgba(15, 17, 21, 0.08);
+}
+
+.theme-light .songLibraryRowTag {
+  border-color: rgba(15, 17, 21, 0.18);
+}
+
+.theme-light .songLibraryGroupFavorites .songLibraryGroupHeader {
+  color: rgba(214, 51, 132, 0.95);
+}
+
+.theme-light .songLibraryClose:hover {
+  background: rgba(15, 17, 21, 0.06);
+  border-color: rgba(15, 17, 21, 0.12);
+}
+
+.theme-light .songLibrarySearch {
+  background: rgba(15, 17, 21, 0.04);
+  border-color: rgba(15, 17, 21, 0.18);
+}
+
+.theme-light .songLibrarySearch:focus-within {
+  background: rgba(15, 17, 21, 0.06);
+  border-color: rgba(0, 200, 140, 0.55);
+}
+
+.theme-light .songLibrarySearchClear {
+  background: rgba(15, 17, 21, 0.08);
+  color: rgba(15, 17, 21, 0.65);
+}
+
+.theme-light .songLibrarySearchClear:hover {
+  background: rgba(15, 17, 21, 0.16);
+  color: rgba(15, 17, 21, 0.92);
+}
+
+.theme-light .songLibraryRowMark {
+  background: rgba(0, 200, 140, 0.22);
+}
+
+.theme-light .songLibraryHint {
+  color: rgba(15, 17, 21, 0.5);
+}
+
+.theme-light .topBadgeButton:hover {
+  background: rgba(0, 200, 140, 0.12);
+}
+
+.theme-light .lyricsBox .lyricLine,
+.theme-light .lyricsBox .lyricNotice {
+  color: rgba(15, 17, 21, 0.7);
+}
+
+.theme-light .lyricsBox .lyricLine:hover {
+  color: #0f1115;
+}
+
+.theme-light .lyricsBox .activeLyric {
+  color: #6b6a00;
+  text-shadow: 0 0 18px rgba(217, 221, 0, 0.45);
+}
+
+.theme-light .nowPlaying,
+.theme-light .songListPanel,
+.theme-light .songRow,
+.theme-light .modalCard,
+.theme-light .searchResults,
+.theme-light .searchResult,
+.theme-light .searchBox,
+.theme-light .modalField input,
+.theme-light .modalLog,
+.theme-light .modalLrcFolder,
+.theme-light .modalLrcWarning,
+.theme-light .modalClose,
+.theme-light .modalButton.ghost,
+.theme-light .modalStatus,
+.theme-light .topBadge,
+.theme-light .topBadgeButton {
+  border-color: var(--border-color);
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+.theme-light .searchBox {
+  background:
+    linear-gradient(180deg, rgba(15, 17, 21, 0.04), rgba(15, 17, 21, 0.02)),
+    rgba(255, 255, 255, 0.95);
+  color: var(--text-muted);
+  box-shadow: 0 8px 24px rgba(15, 17, 21, 0.08);
+}
+
+.theme-light .searchBox input,
+.theme-light .modalField input {
+  color: var(--text-main);
+}
+
+.theme-light .songRow {
+  background: var(--card-tint);
+  color: var(--text-muted);
+}
+
+.theme-light .songRow:hover,
+.theme-light .songRow.isActive {
+  background-color: rgba(0, 184, 130, 0.08);
+  opacity: 0.8;
+}
+
+.theme-light .songMeta strong,
+.theme-light .miniSong strong,
+.theme-light .miniSong span,
+.theme-light .sectionTitle h2,
+.theme-light .eyebrow span {
+  color: var(--text-main);
+}
+
+.theme-light .songMeta small,
+.theme-light .miniSong span {
+  color: var(--text-muted);
+}
+
+.theme-light .playerBar {
+  background-color: rgba(255, 255, 255, 0.86);
+  background-image: linear-gradient(90deg, rgba(244, 245, 247, 0.95), rgba(255, 255, 255, 0.86));
+  color: var(--text-main);
+  border-top-color: var(--border-color);
+}
+
+.theme-light .topBar {
+  background: transparent;
+}
+
+.theme-light .searchClear {
+  background: rgba(15, 17, 21, 0.04);
+  border-color: rgba(15, 17, 21, 0.1);
+  color: var(--text-muted);
+}
+
+.theme-light .searchClear:hover {
+  background: rgba(0, 184, 130, 0.12);
+  border-color: rgba(0, 184, 130, 0.5);
+  color: #007a55;
+}
+
+.theme-light .modalLog {
+  background: rgba(15, 17, 21, 0.04);
+  color: var(--text-main);
+}
+
+.theme-light .modalStatus.isError {
+  background: rgba(255, 99, 122, 0.12);
+  border-color: rgba(255, 99, 122, 0.4);
+  color: #c0364a;
+}
+
+/* Custom background — applied when user picks an image. The image is rendered
+   inside the existing .ambientBg wrapper so it shares the same fixed/inset/-2
+   stacking as the default banner. A dedicated shade layer dims it for
+   legibility. The page itself is left alone, so layout is unaffected. */
+
+/* Base .ambientBgCustom — kept neutral so both views (home + lyrics) can
+   override it. Opacity is always 1; the slider in Settings drives the
+   shade/gradient overlay thickness (see .appShell.homeView.hasCustomBg
+   below), not the image opacity. The .lyricsView rule hides the custom
+   image entirely. */
+.ambientBgCustom {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: -1;
+  filter: none !important;
+  opacity: 1 !important;
+  animation: none !important;
+  transform: none !important;
+}
+
+/* When a custom background is active, hide the blurred default banner so
+   the user's chosen image is the only thing visible behind the shade. */
+.appShell.hasCustomBg .ambientBg > img:not(.ambientBgCustom) {
+  display: none;
+}
+
+/* Home view: show the custom image (opacity 1) and let the slider drive
+   the shade/gradient overlay thickness via CSS variables set inline on
+   .appShell. The shade defaults to ~0.42 alpha so a freshly-picked image
+   is already legible; pulling the slider toward 20% thickens the overlay
+   to ~0.64, pushing it to 100% thins it to ~0.20. */
+.appShell.homeView.hasCustomBg .ambientBgShade {
+  background: rgba(7, 11, 22, var(--custom-bg-shade-opacity, 0.42));
+}
+
+.appShell.homeView.hasCustomBg .ambientBg::after {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(7, 11, 22, var(--custom-bg-gradient-top, 0.25)),
+      rgba(7, 11, 22, var(--custom-bg-gradient-bottom, 0.54))
+    );
+}
+
+/* Lyrics view: hide the user's custom image and let the existing default
+   ambient background show through so lyrics stay readable. The current
+   song's banner is used as the default ambient image. */
+.appShell.lyricsView.hasCustomBg .ambientBgCustom {
+  display: none !important;
+}
+
+/* When in lyrics view, also show the default banner back so the lyrics
+   panel has a real (non-custom) backdrop. */
+.appShell.lyricsView.hasCustomBg .ambientBg > img:not(.ambientBgCustom) {
+  display: block;
+}
+
+.ambientBgShade {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(7, 11, 22, 0.55);
+  pointer-events: none;
+}
+
+.theme-light .ambientBgShade {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* Light-theme custom background overlay — reuse the white tint that the
+   non-custom ambient uses, but drive its alpha with the same slider
+   variables. The dark-theme default above (rgba(7, 11, 22, ...)) is
+   overridden for .appShell.homeView when the light theme is active. */
+.theme-light .appShell.homeView.hasCustomBg .ambientBgShade {
+  background: rgba(255, 255, 255, var(--custom-bg-shade-opacity, 0.42));
+}
+
+.theme-light .appShell.homeView.hasCustomBg .ambientBg::after {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, var(--custom-bg-gradient-top, 0.25)),
+      rgba(255, 255, 255, var(--custom-bg-gradient-bottom, 0.54))
+    );
+}
+
+/* Settings button — matches the existing Add Song button visual style. */
+.settingsButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-light .settingsButton:hover {
+  color: #007a55;
+}
+
+/* Settings modal — same skeleton as Add Song modal for consistency. */
+.settingsModal {
+  width: min(520px, 100%);
+}
+
+.settingsModal .modalHeader h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settingsSection {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--card-tint, rgba(255, 255, 255, 0.025));
+}
+
+.settingsSectionTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--green-color, #00ffb3);
+}
+
+.theme-light .settingsSectionTitle {
+  color: #007a55;
+}
+
+.settingsHint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.65));
+}
+
+.settingsThemeRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.settingsThemeOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  background: var(--bg-card, rgba(255, 255, 255, 0.02));
+  color: var(--text-main, #ffffff);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.12s ease;
+}
+
+.settingsThemeOption:hover {
+  border-color: rgba(0, 255, 179, 0.45);
+  background: rgba(0, 255, 179, 0.06);
+}
+
+.settingsThemeOption.isActive {
+  border-color: var(--green-color, #00ffb3);
+  background: rgba(0, 255, 179, 0.12);
+}
+
+.settingsThemeSwatch {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+}
+
+.settingsThemeSwatchDark {
+  background: linear-gradient(135deg, #0b1220, #21324a);
+}
+
+.settingsThemeSwatchLight {
+  background: linear-gradient(135deg, #ffffff, #d6d8df);
+}
+
+.settingsThemeLabel {
+  display: grid;
+  gap: 2px;
+}
+
+.settingsThemeLabel strong {
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.settingsThemeLabel small {
+  font-size: 0.74rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.settingsBackgroundControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settingsBackgroundPreview {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  background: #000;
+  border: 1px dashed var(--border-color, rgba(255, 255, 255, 0.18));
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settingsBackgroundPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+
+.settingsBackgroundEmpty {
+  font-size: 0.78rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.55));
+  padding: 0 12px;
+  text-align: center;
+}
+
+/* Ensure the side-panel layout still fits in 360px when the settings button
+   is added next to the existing Add Song button. */
+@media (max-width: 720px) {
+  .settingsThemeRow {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsButton span {
+    display: none;
+  }
+}
+
+/* Custom app background lives in .ambientBg.
+   Do NOT put a solid background on .appShell, .theme-light .appShell,
+   .lyricsPanel or .theme-light .ambientBg, otherwise it will paint on top
+   of the ambient background. .ambientBg uses negative z-index (-2) so any
+   solid background on a positioned ancestor paints AFTER it in the root
+   stacking context and occludes the user's chosen image.
+   The default look (no custom image picked) is preserved by the gradient
+   on .ambientBg::after and the body's own background. */
+.appShell,
+.theme-light .appShell,
+.lyricsPanel {
+  background: transparent;
+  background-color: transparent;
+}
+
+.theme-light .ambientBg {
+  background: transparent;
+}
+
+/* Background-gallery grid: thumbnails of every uploaded image. The active
+   thumbnail gets a mint border + glow. A small X button sits on each tile
+   to remove that image from the gallery. */
+.settingsBackgroundGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settingsBackgroundItem {
+  position: relative;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  color: inherit;
+  font: inherit;
+}
+
+.settingsBackgroundItem:hover {
+  transform: translateY(-1px);
+  border-color: rgba(0, 255, 179, 0.35);
+}
+
+.settingsBackgroundItem:focus-visible {
+  outline: none;
+  border-color: var(--green-color);
+  box-shadow: 0 0 0 2px rgba(0, 255, 179, 0.22);
+}
+
+.settingsBackgroundItem.active {
+  border-color: var(--green-color);
+  box-shadow: 0 0 0 2px rgba(0, 255, 179, 0.18);
+}
+
+.settingsBackgroundItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.settingsBackgroundItemPlaceholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.settingsBackgroundDelete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(7, 11, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.settingsBackgroundDelete:hover {
+  background: rgba(220, 38, 38, 0.85);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);
+}
+
+.settingsBackgroundDelete:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35);
+}
+
+/* Toggle row for "Tự đổi ảnh nền". Arranges label + switch button. */
+.settingsToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+}
+
+.settingsToggleLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settingsToggleTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* The switch button. 44×24px pill shape. */
+.settingsToggle {
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background 0.22s ease;
+  position: relative;
+  outline: none;
+}
+
+.settingsToggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(0, 255, 179, 0.25);
+}
+
+.settingsToggle.isOn {
+  background: var(--green-color);
+}
+
+/* The sliding thumb circle. */
+.settingsToggleThumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  display: block;
+}
+
+.settingsToggle.isOn .settingsToggleThumb {
+  transform: translateX(20px);
+}
+
+/* Light-theme variant: darker track when off. */
+.theme-light .settingsToggle {
+  background: rgba(15, 17, 21, 0.22);
+}
+
+/* Preview of the currently-selected image. object-fit: contain keeps the
+   full image visible without cropping. */
+.settingsBackgroundPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+
+/* Slider for background opacity. The input itself reuses the existing
+   input[type="range"] styling defined higher in the file — no new color
+   tokens introduced. */
+.settingsRange {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.settingsRangeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--white-color);
+  font-weight: 400;
+}
+
+.settingsRangeHeader > span:last-child {
+  color: var(--green-color);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.theme-light .settingsRangeHeader > span:last-child {
+  /* In light theme --green-color stays mint (#00ffb3) which is harsh on a
+     light background; reuse the same dark-mode accent token already used
+     for other interactive accents (.theme-light .settingsButton:hover). */
+  color: #007a55;
+}
+
+/* Background-opacity slider. Overrides the base input[type="range"] track
+   (which is only 2px tall with a gradient that needs --progress) so the
+   track is visible and the thumb is a solid circle. Does not touch the
+   player seek/volume sliders — those keep the base 2px track. */
+.settingsRange input[type="range"] {
+  width: 100%;
+  height: 24px;
+  margin-top: 10px;
+  cursor: pointer;
+  accent-color: var(--green-color);
+  background: transparent;
+}
+
+.settingsRange input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(0, 255, 179, 0.18);
+}
+
+.settingsRange input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--green-color);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 4px rgba(0, 255, 179, 0.16);
+  cursor: pointer;
+}
+
+.lyricsBox .lyricLine,
+.lyricsBox .lyricNotice {
+  min-height: unset;
+}
+
+.settingsRange input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(0, 255, 179, 0.18);
+}
+
+.settingsRange input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--green-color);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 4px rgba(0, 255, 179, 0.16);
+}
+
+/* Light theme: darken the track so it stays visible on the lighter
+   modal background, and swap the mint border for a dark-green hint. */
+.theme-light .settingsRange input[type="range"]::-webkit-slider-runnable-track {
+  background: rgba(0, 0, 0, 0.14);
+  border-color: rgba(0, 122, 85, 0.18);
+}
+
+.theme-light .settingsRange input[type="range"]::-moz-range-track {
+  background: rgba(0, 0, 0, 0.14);
+  border-color: rgba(0, 122, 85, 0.18);
+}
+
+

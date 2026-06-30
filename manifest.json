@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json.schemastore.org/chrome-extension",
+  "manifest_version": 3,
+  "name": "SVD Music Player",
+  "version": "1.1.4",
+  "description": "SVD Music - React Music Player với lyrics sync, search, shuffle, repeat",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {},
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs",
+    "downloads",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5173/*",
+    "http://localhost:5173/*",
+    "https://gemini.google.com/*",
+    "https://*.youtube.com/*",
+    "https://i.ytimg.com/*",
+    "https://www.yt2mp3.cloud/*",
+    "https://api.yt2mp3converter.net/*",
+    "https://*.yt2mp3converter.net/*",
+    "https://*.123tokyo.xyz/*",
+    "https://api.shopaikey.com/*",
+    "https://api.mp3cow.com/*",
+    "https://mp3cow.com/*",
+    "https://www.mp3cow.com/*",
+    "https://wejfknwejfkerf.org/*",
+    "https://*.wejfknwejfkerf.org/*",
+    "https://zenquotes.io/*",
+    "https://api.quotable.io/*",
+    "https://api.mymemory.translated.net/*",
+    "https://ipapi.co/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["gemini-content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["fonts/*", "audio/*", "images/*", "lrc/*", "gemini-content.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
