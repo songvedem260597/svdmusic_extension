@@ -7,8 +7,31 @@
 
 ## Version Changelog
 
+### v1.1.5 (2026-07-02)
+- Comprehensive responsive CSS layer added at the END of `src/styles.css`
+ - Fluid typography: `html { font-size: clamp(13px, 0.45vw + 11px, 17px) }` — every rem-based size scales smoothly between 320px and 1600px+
+ - Fluid spacing: `clamp()` on padding, gaps, discWrap, lyricsLine, playerBar, miniCover, etc.
+ - Breakpoint sweep: 1600 / 1280 / 1024 / 900 / 768 / 640 / 480 / 360 / 320 px
+ - Special handling:
+   - 4K cap (2400px): max type 18px, pageGrid max-width 1680px, discWrap 440px
+   - Landscape phones (max-height: 480px): lyricsPanel + discWrap shrink to fit
+   - Safe-area insets for notched iOS/Android devices
+   - `100dvh` for shell and lyricsPanel — fixes mobile browser chrome resizing
+   - `min-width: 280px` on `.appShell` — prevents accidental collapse if side panel is dragged to ~280px
+ - Existing 1040 / 720 / 480 / 400 component-specific media queries are preserved; this new layer smooths the gaps between them and fixes tiny-side-panel edge cases
+ - Build output: `dist/assets/sidepanel-*.css` grew from 110.93 kB → 125.09 kB (gzip 21.56 → 24.83 kB)
+
 ### Workflow
 - **Sau khi update version trong manifest.json → tự động chạy `npm run build`** (không cần user nhắc)
+
+### v1.1.5 (2026-07-02)
+- Restrict `max-width: 1480px` chỉ áp dụng cho `.pageGrid.view-list`
+ - Trước đó `.pageGrid` chính có `max-width: 1480px` + `@media (min-width: 1600px) { .pageGrid { max-width: 1480px } }` + `@media (min-width: 2200px) { .pageGrid { max-width: 1680px } }`
+ - View-lyrics bị cap 1480/1680 ở viewport lớn → disc và lyrics stage bị bó hẹp trong khi stage có rule max-width riêng (1320/1520) ổn rồi
+ - Bỏ max-width khỏi `.pageGrid` chính + xóa hẳn 2 @media `.pageGrid` ở ≥1600/2200
+ - Move `max-width: 1480px` sang `.pageGrid.view-list` để giữ centered cap cho list view (where list có thể span to)
+ - Lyrics view giờ full-width viewport, chỉ `.lyricsStage` còn cap 1320/1520 ở ≥1600/2200
+ - Không ảnh hưởng rule `.lyricsPanel` clamp height đã move sang `.pageGrid.view-list .lyricsPanel` ở v1.1.4
 
 ### v1.1.4 (2026-06-30)
 - Fix: loại bỏ hoàn toàn `navigator.geolocation` (đã được thay bằng IP geolocation)

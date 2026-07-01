@@ -99,7 +99,7 @@ button {
   flex-direction: column;
   min-height: 100vh;
   overflow-x: hidden;
-  padding-bottom: 88px;
+  padding-bottom: 0;
   background: var(--bg-index);
 }
 
@@ -382,8 +382,8 @@ button {
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(11, 18, 32, 0.72)),
-    rgba(0, 0, 0, 0.3);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.55) 55%, rgba(11, 18, 32, 0.92) 100%),
+    rgba(0, 0, 0, 0.45);
 }
 
 .lyricsStage {
@@ -680,7 +680,7 @@ button {
 
 .typingText {
   font-weight: 300;
-  font-size: 16px;
+  font-size: clamp(0.85rem, 1.6vw, 1rem);
   letter-spacing: -0.3px;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.92);
@@ -688,7 +688,7 @@ button {
 
 .typingText {
   font-weight: 300;
-  font-size: 16px;
+  font-size: clamp(0.85rem, 1.6vw, 1rem);
   line-height: 1.4;
   letter-spacing: -0.3px;
   color: var(--text-main, rgba(255, 255, 255, 0.92));
@@ -719,9 +719,19 @@ button {
   .nowPlayingBottom {
     padding: 10px 8px;
   }
+  .miniSong { display: none !important; }
+  .playerBar {
+    /* .miniSong is hidden — collapse its 3rd grid column so the freed
+       space flows into playerCenter (transport) and playerRight
+       (volume + extra buttons). */
+    grid-template-columns: 1fr auto;
+    height: 72px;
+    padding: 0 8px;
+    gap: 8px;
+  }
   .typingText {
     font-weight: 300;
-    font-size: 16px;
+    font-size: clamp(0.85rem, 1.6vw, 1rem);
     letter-spacing: -0.2px;
   }
 }
@@ -1505,6 +1515,15 @@ button {
   background: rgba(0, 255, 179, 0.18);
 }
 
+/* Mic button (Lyrics / Danh sách toggle) lives in the player bar. Hidden
+   on small viewports (≤1040px) and restored on wider screens so it can act
+   as a quick view switcher next to the player controls. */
+.playerRight .micButton { display: none !important; }
+
+@media (min-width: 1041px) {
+  .playerRight .micButton { display: flex !important; }
+}
+
 .playerButtons .miniPlayButton {
   position: relative;
   z-index: 1;
@@ -1697,7 +1716,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (max-width: 720px) {
   .appShell {
-    padding-bottom: 132px;
+    padding-bottom: 0;
   }
 
   .topBar {
@@ -1897,7 +1916,7 @@ button, input {
   flex-direction: column;
   min-height: 100vh;
   overflow-x: hidden;
-  padding-bottom: 80px; /* equal to playerBar height */
+  padding-bottom: 0;
   background: var(--bg-index);
 }
 
@@ -2181,8 +2200,8 @@ button, input {
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(11, 18, 32, 0.72)),
-    rgba(0, 0, 0, 0.3);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.55) 55%, rgba(11, 18, 32, 0.92) 100%),
+    rgba(0, 0, 0, 0.45);
 }
 
 .lyricsStage {
@@ -2430,7 +2449,7 @@ button, input {
 
 .typingText {
   font-weight: 300;
-  font-size: 16px;
+  font-size: clamp(0.85rem, 1.6vw, 1rem);
   letter-spacing: -0.3px;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.92);
@@ -2438,7 +2457,7 @@ button, input {
 
 .typingText {
   font-weight: 300;
-  font-size: 16px;
+  font-size: clamp(0.85rem, 1.6vw, 1rem);
   line-height: 1.4;
   letter-spacing: -0.3px;
   color: var(--text-main, rgba(255, 255, 255, 0.92));
@@ -2469,9 +2488,19 @@ button, input {
   .nowPlayingBottom {
     padding: 10px 8px;
   }
+  .miniSong { display: none !important; }
+  .playerBar {
+    /* .miniSong is hidden — collapse its 3rd grid column so the freed
+       space flows into playerCenter (transport) and playerRight
+       (volume + extra buttons). */
+    grid-template-columns: 1fr auto;
+    height: 72px;
+    padding: 0 8px;
+    gap: 8px;
+  }
   .typingText {
     font-weight: 300;
-    font-size: 16px;
+    font-size: clamp(0.85rem, 1.6vw, 1rem);
     letter-spacing: -0.2px;
   }
 }
@@ -3222,6 +3251,15 @@ button, input {
   background: rgba(0, 255, 179, 0.18);
 }
 
+/* Mic button (Lyrics / Danh sách toggle) lives in the player bar. Hidden
+   on small viewports (≤1040px) and restored on wider screens so it can act
+   as a quick view switcher next to the player controls. */
+.playerRight .micButton { display: none !important; }
+
+@media (min-width: 1041px) {
+  .playerRight .micButton { display: flex !important; }
+}
+
 .playerButtons .miniPlayButton {
   position: relative;
   z-index: 1;
@@ -3395,7 +3433,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 @media (max-width: 720px) {
   .appShell {
-    padding-bottom: 80px;
+    padding-bottom: 0;
   }
 
   .topBar {
@@ -3613,7 +3651,8 @@ input[type="range"]::-webkit-slider-thumb {
     display: flex;
     gap: 18px;
     width: 100%;
-    margin: 0;
+    max-width: 1480px;
+    margin-inline: auto;
   }
 
   .pageGrid.view-list .nowPlaying {
@@ -3737,10 +3776,14 @@ input[type="range"]::-webkit-slider-thumb {
 
   /* Player bar */
   .playerBar {
-    grid-template-columns: 22% 56% 22%;
+    /* .miniSong is hidden at this breakpoint — collapse its column so
+       playerCenter (transport) and playerRight (volume + buttons)
+       take the full width. Matches the rule in the @media (max-width:
+       720px) block above so both breakpoints agree. */
+    grid-template-columns: 1fr auto;
     height: 72px;
     padding: 0 8px;
-    gap: 0;
+    gap: 8px;
   }
 
   .miniSong {
@@ -4124,6 +4167,8 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 @media (max-width: 720px) {
+  .brand img { width: 96px; }
+
   .topBarActions {
     justify-self: start;
     order: 3;
@@ -4269,8 +4314,8 @@ input[type="range"]::-webkit-slider-thumb {
 
 .theme-light .lyricsBgShade {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(244, 245, 247, 0.65)),
-    rgba(255, 255, 255, 0.3);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(244, 245, 247, 0.55) 55%, rgba(244, 245, 247, 0.9) 100%),
+    rgba(255, 255, 255, 0.45);
 }
 
 .theme-light .lyricsBox {
@@ -5301,4 +5346,574 @@ input[type="range"]::-webkit-slider-thumb {
   border-color: rgba(0, 122, 85, 0.18);
 }
 
+
+/* ============================================================================
+   Global responsive layer — fluid type, safe-area insets, breakpoint sweep
+   ----------------------------------------------------------------------------
+   This block is the LAST in the file, so it always wins over earlier rules.
+   Strategy:
+     1) Use clamp() on the most common dimensions (font-size, padding, gaps).
+     2) Provide a clean breakpoint sweep at 1280 / 1024 / 768 / 640 / 480 /
+        360 / 320 px for layout-level changes.
+     3) Honour iOS / Android safe-area insets for notched devices.
+     4) Cap maximum type and disc size on very large viewports so the layout
+        stays cohesive on 4K screens.
+   Existing component-specific media queries (1040 / 720 / 480 / 400) still
+   apply, but this layer smooths the gaps between them and fixes the most
+   common edge cases: side panels narrower than 360 px, very tall narrow
+   popups, ultra-wide screens.
+   ============================================================================ */
+
+/* Fluid type — applied to body so every rem-based size scales smoothly. */
+html {
+  font-size: clamp(13px, 0.45vw + 11px, 17px);
+  /* Honour the iOS / Android safe areas for notched devices. */
+  scroll-padding-block-start: env(safe-area-inset-top, 0);
+  scroll-padding-block-end: env(safe-area-inset-bottom, 0);
+}
+
+body {
+  /* Pull body away from the device's curved edges. */
+  padding-inline: env(safe-area-inset-left, 0) env(safe-area-inset-right, 0);
+  padding-block-end: env(safe-area-inset-bottom, 0);
+  /* Use dvh when supported, fall back to vh. dvh fixes mobile browser
+     chrome (URL bar) shrinking the visible area. */
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.appShell {
+  /* Make sure the shell never collapses below the playable minimum width
+     on accidental viewport resizes (e.g. a side panel being dragged to
+     ~280 px). The min-width lets the discWrap / lyricsBox remain visible. */
+  min-width: 280px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: 0;
+}
+
+.appShell.viewLyrics {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ----- Fluid type cap: very wide viewports ----------------------------- */
+@media (min-width: 1600px) {
+  html { font-size: 17px; }
+}
+@media (min-width: 2400px) {
+  /* 4K — type stays readable, layout doesn't dwarf the disc. */
+  html { font-size: 18px; }
+}
+
+/* ----- Top bar — fluid padding and columns ----------------------------- */
+.topBar {
+  /* Header height scales slightly with viewport so it doesn't feel bulky
+     on a phone or cramped on a desktop. */
+  height: clamp(52px, 6vh, 80px);
+  padding-inline: clamp(8px, 3vw, 72px);
+  gap: clamp(6px, 1.4vw, 24px);
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
+}
+
+.brand img { width: clamp(72px, 10vw, 150px); }
+
+.searchBox { height: clamp(34px, 4.2vh, 42px); }
+.searchBox input { font-size: clamp(0.78rem, 0.4vw + 0.7rem, 0.95rem); }
+
+/* ----- Page grid — fluid gap and padding ------------------------------- */
+.pageGrid {
+  gap: clamp(8px, 1.6vw, 20px);
+  padding-inline: clamp(6px, 1.6vw, 0px);
+  padding-bottom: clamp(8px, 2vh, 20px);
+}
+
+.nowPlaying,
+.songListPanel {
+  margin-inline: clamp(8px, 1.4vw, 18px);
+}
+
+.nowPlaying { padding: clamp(10px, 1.6vw, 24px); }
+.songListPanel { padding: clamp(10px, 1.4vw, 22px); }
+
+/* ----- Lyrics panel — fluid stage and disc ----------------------------- */
+.lyricsPanel {
+  min-height: clamp(360px, 60vh, 760px);
+}
+
+.pageGrid.view-list .lyricsPanel {
+  height: clamp(480px, calc(100dvh - 160px), 800px);
+}
+
+.lyricsStage {
+  width: min(1200px, 100% - 16px);
+  padding-block: clamp(16px, 5vh, 72px);
+  gap: clamp(20px, 4vw, 80px);
+}
+
+.songAction { width: clamp(180px, 28vw, 400px); flex: 0 0 clamp(180px, 28vw, 400px); }
+.discWrap {
+  width: clamp(160px, 26vw, 380px);
+  height: clamp(160px, 26vw, 380px);
+}
+
+/* Lyrics line — fluid font size. */
+.lyricsBox .lyricLine,
+.lyricsBox .lyricNotice,
+.lyricsBox .lyricSpacer {
+  font-size: clamp(1.05rem, 1.05vw + 0.7rem, 2rem);
+  padding-inline: clamp(6px, 1.4vw, 36px);
+  min-height: clamp(48px, 7vh, 76px);
+}
+
+/* ----- Player bar — fluid height and columns --------------------------- */
+.playerBar {
+  height: clamp(64px, 9vh, 88px);
+  font-size: clamp(0.7rem, 0.2vw + 0.66rem, 0.85rem);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr) minmax(0, 1fr);
+  gap: clamp(4px, 1vw, 18px);
+  padding-inline: clamp(4px, 1.2vw, 16px);
+}
+
+.miniCover { width: clamp(34px, 4vh, 44px); height: clamp(34px, 4vh, 44px); }
+
+.playerButtons .miniPlayButton {
+  width: clamp(36px, 5vh, 48px);
+  height: clamp(36px, 5vh, 48px);
+}
+.playerButtons .miniPlayButton::before {
+  width: clamp(36px, 5vh, 48px);
+  height: clamp(36px, 5vh, 48px);
+}
+
+.playerRight { gap: clamp(6px, 1vw, 14px); }
+.playerRight button { width: clamp(26px, 4vh, 36px); height: clamp(26px, 4vh, 36px); }
+.playerRight .micButton { width: clamp(26px, 4vh, 36px); height: clamp(26px, 4vh, 36px); }
+
+.seekRow { grid-template-columns: clamp(40px, 8vw, 80px) minmax(0, 1fr) clamp(40px, 8vw, 80px); }
+.seekRow span { font-size: clamp(0.6rem, 0.2vw + 0.55rem, 0.78rem); }
+
+/* ====================================================================
+   Breakpoint sweep — fills gaps between the component-specific 1040 /
+   720 / 480 / 400 media queries that already exist further up.
+   Order matters: largest to smallest.
+   ==================================================================== */
+
+/* ----- 1280 — large desktop tweaks ------------------------------------- */
+@media (max-width: 1280px) {
+  .lyricsPanel { height: clamp(460px, calc(100dvh - 150px), 760px); }
+  .lyricsStage { padding-inline: clamp(24px, 4vw, 72px); }
+}
+
+/* ----- 1024 — tablet landscape / small desktop ------------------------- */
+@media (max-width: 1024px) {
+  .topBar { height: clamp(50px, 6.5vh, 70px); }
+  .lyricsStage { gap: clamp(20px, 3vw, 40px); }
+  .playerBar { padding-inline: clamp(6px, 1.4vw, 12px); }
+}
+
+/* ----- 900 — tablet portrait ------------------------------------------- */
+@media (max-width: 900px) {
+  .pageGrid {
+    flex-direction: column;
+  }
+  .nowPlaying,
+  .songListPanel {
+    margin-inline: clamp(6px, 1.4vw, 14px);
+  }
+  .lyricsPanel {
+    width: calc(100% - 0px);
+    margin-inline: 0;
+  }
+  .songAction {
+    width: clamp(200px, 30vw, 320px);
+    flex: 0 0 clamp(200px, 30vw, 320px);
+  }
+  .discWrap {
+    width: clamp(200px, 28vw, 300px);
+    height: clamp(200px, 28vw, 300px);
+  }
+}
+
+/* ----- 768 — small tablet ---------------------------------------------- */
+@media (max-width: 768px) {
+  .lyricsStage {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: clamp(16px, 3vh, 24px);
+    padding-block: clamp(20px, 4vh, 40px);
+  }
+  .songAction {
+    width: 100%;
+    flex: 0 1 auto;
+  }
+  .discWrap {
+    width: clamp(220px, 60vw, 320px);
+    height: clamp(220px, 60vw, 320px);
+    margin-inline: auto;
+  }
+  .lyricsColumn { width: 100%; }
+  .lyricsBox { height: clamp(320px, 50vh, 480px); }
+
+  .nowPlayingTop {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .coverStack { margin-inline: auto; display: none; }
+
+  .topBadge { font-size: clamp(0.65rem, 1.6vw, 0.8rem); }
+}
+
+/* ----- 640 — large phone ------------------------------------------------ */
+@media (max-width: 640px) {
+  .appShell { padding-bottom: 0; }
+  .topBar { height: clamp(46px, 7vh, 56px); padding-inline: 10px; gap: 6px; }
+  .brand img { width: clamp(64px, 14vw, 96px); }
+  .searchBox { height: 34px; padding-inline: 8px 10px; }
+  .searchBox input { font-size: 0.82rem; }
+
+  .pageGrid { gap: 6px; padding-inline: 0; }
+
+  .lyricsPanel { min-height: 320px; height: clamp(320px, 55vh, 460px); }
+  .lyricsStage { padding-block: clamp(14px, 3vh, 24px); }
+  .discWrap {
+    width: clamp(160px, 55vw, 240px);
+    height: clamp(160px, 55vw, 240px);
+  }
+
+  .playerBar {
+    height: clamp(60px, 9vh, 72px);
+    font-size: 0.72rem;
+  }
+  .playerButtons { gap: clamp(6px, 1.6vw, 10px); }
+  .playerCenter { gap: 6px; }
+  .volumeControl { display: none; }
+  .miniSong { padding-left: 4px; gap: 6px; }
+  .miniEqualizer { display: none; }
+
+  .nowPlaying { padding: 10px 8px; }
+  .songListPanel { padding: 8px; }
+  .songRow { padding: 10px 8px; min-height: clamp(52px, 8vh, 64px); gap: 10px; }
+  .rowCover { width: clamp(36px, 6vh, 44px); height: clamp(36px, 6vh, 44px); }
+}
+
+/* ----- 1024 — tablet landscape ------------------------------------------
+   Apply the same vertical-stack playerBar layout as the @media
+   (max-width: 480px) block below: .miniSong hidden, shuffle + repeat
+   absolutely positioned at the left / right edges of the bar,
+   playerCenter spans the full width and stacks the transport buttons
+   (row 1) over the seek row (row 2). The bar grows from ~72 px to
+   ~108–124 px so the controls stay tappable. The narrower block below
+   (≤ 480 px) re-declares these properties and wins via cascade. */
+@media (max-width: 1024px) {
+  .miniSong { display: none; }
+
+  .playerBar {
+    /* Keep position: fixed from the base rule so the bar stays pinned
+       to the bottom of the viewport even when the page scrolls (e.g.
+       the long lyrics panel). .playerRight is absolute (inset: 0)
+       and works correctly inside the fixed bar. */
+    height: clamp(96px, 15vh, 124px);
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    justify-items: center;
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .playerCenter {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 0 48px;
+    width: 100%;
+  }
+
+  .playerButtons {
+    gap: clamp(10px, 3vw, 16px);
+    height: auto;
+    justify-content: center;
+  }
+  .playerButtons button { width: 30px; height: 30px; }
+
+  .playerButtons .miniPlayButton {
+    width: 44px; height: 44px;
+  }
+  .playerButtons .miniPlayButton::before { width: 44px; height: 44px; }
+
+  .seekRow { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 4px; padding: 0 4px; }
+  .seekRow span { font-size: 0.68rem; }
+
+  .playerRight {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .micButton,
+  .volumeControl { display: none; }
+
+  .playerBar .shuffleButton {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: auto;
+    width: clamp(36px, 6vh, 44px);
+    height: clamp(36px, 6vh, 44px);
+  }
+  .playerBar .repeatButton {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: auto;
+    width: clamp(36px, 6vh, 44px);
+    height: clamp(36px, 6vh, 44px);
+  }
+}
+
+/* ----- Player bar — vertical stack on small viewports -------------------
+   On narrow viewports (phone in portrait, side panel ≤ 480px) the
+   3-column playerBar becomes too cramped. Switch to a 2-row vertical
+   stack: row 1 = miniSong (cover + title), row 2 = playerCenter
+   (buttons + seek row). Hide the right-side buttons (shuffle/repeat/mic)
+   — they remain reachable through the search/settings popovers. The bar
+   grows from 60–72px to ~108–124px so all controls stay tappable and the
+   seek row is readable. */
+@media (max-width: 480px) {
+  .appShell {
+    /* Match the new taller playerBar (clamp 96–124px) plus the
+       safe-area-inset bottom. .miniSong is hidden — its info is visible
+       in the lyrics panel / nowPlaying cover above. */
+    padding-bottom: 0;
+  }
+
+  /* Hide .miniSong entirely on small viewports so we can use the freed
+     horizontal space for shuffle (left) + repeat (right) of the
+     transport controls. */
+  .miniSong { display: none; }
+
+  .playerBar {
+    /* 2 rows × 3 cols. Shuffle / repeat are absolutely positioned at
+       the left / right edges so they sit visually OUTSIDE the
+       playerCenter (which spans cols 1–3). Row 1 = transport buttons
+       (prev / play / next), row 2 = seek row.
+       Keep position: fixed from the base rule so the bar stays pinned
+       to the bottom of the viewport when the page scrolls. */
+    height: clamp(96px, 15vh, 124px);
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    align-items: center;
+    justify-items: center;
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  /* playerCenter spans the full width; shuffle/repeat overlay on top
+     of its left/right edges via absolute positioning. */
+  .playerCenter {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 0 48px; /* leave room on left/right for shuffle + repeat */
+    width: 100%;
+  }
+
+  .playerButtons {
+    gap: clamp(10px, 3vw, 16px);
+    height: auto;
+    justify-content: center;
+  }
+  .playerButtons button { width: 30px; height: 30px; }
+
+  .playerButtons .miniPlayButton {
+    width: 44px; height: 44px;
+  }
+  .playerButtons .miniPlayButton::before { width: 44px; height: 44px; }
+
+  .seekRow { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 4px; padding: 0 4px; }
+  .seekRow span { font-size: 0.68rem; }
+
+  /* .playerRight becomes an absolute overlay layer anchored to the bar
+     edges. Its children (shuffleButton, repeatButton) are positioned
+     to the far left / far right of the bar so they appear OUTSIDE the
+     playerCenter visually. */
+  .playerRight {
+    position: absolute;
+    inset: 0;
+    pointer-events: none; /* let only buttons receive clicks */
+  }
+
+  .micButton,
+  .volumeControl { display: none; }
+
+  .playerBar .shuffleButton {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: auto;
+    width: clamp(36px, 6vh, 44px);
+    height: clamp(36px, 6vh, 44px);
+  }
+  .playerBar .repeatButton {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: auto;
+    width: clamp(36px, 6vh, 44px);
+    height: clamp(36px, 6vh, 44px);
+  }
+}
+
+/* ----- 480 — phone ------------------------------------------------------- */
+@media (max-width: 480px) {
+  .topBar { height: 48px; padding-inline: 8px; }
+  .brand img { width: 76px; }
+  .searchBox { height: 32px; }
+  .searchBox input { font-size: 0.78rem; }
+  .searchResults { max-height: 60vh; }
+  .searchResult { padding: 6px; gap: 6px; min-height: 44px; }
+  .searchResult img { width: 34px; height: 34px; }
+  .searchResultMeta strong { font-size: 0.78rem; }
+  .searchResultMeta small { font-size: 0.7rem; }
+  .topBadge { font-size: 0.7rem; padding: 0 8px; height: 32px; }
+  .topBadge span { display: none; }
+
+  .lyricsStage { padding-block: 12px; }
+  .discWrap {
+    width: clamp(140px, 56vw, 200px);
+    height: clamp(140px, 56vw, 200px);
+  }
+  .lyricsBox { height: clamp(280px, 50vh, 360px); }
+  .lyricsBox .lyricLine,
+  .lyricsBox .lyricNotice,
+  .lyricsBox .lyricSpacer {
+    font-size: clamp(0.95rem, 4.6vw, 1.2rem);
+    min-height: 56px;
+    padding-inline: 8px;
+  }
+
+  /* .playerBar now uses a balanced 3-column layout (shuffle | center |
+     repeat) on small viewports. The dedicated rules live in the new
+     @media (max-width: 480px) block above (~line 5560). Don't redefine
+     playerBar height/columns here. */
+
+  .modalOverlay { padding: 8px }
+  .modalCard { max-height: calc(100dvh - 16px); }
+  .modalFieldRow { grid-template-columns: 1fr; }
+  .settingsThemeRow { grid-template-columns: 1fr; }
+  .settingsButton span { display: none; }
+
+  /* Add Song button: collapse to icon-only on small viewports so it
+     takes the same horizontal room as the other icon-only badges
+     (settings, library count). The "+" icon stays accessible via the
+     aria-label / title attribute. */
+  .addSongButton span { display: none; }
+  .addSongButton {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .addSongButton svg { width: 16px; height: 16px; }
+}
+
+/* ----- 360 — Chrome side panel (default) ------------------------------- */
+@media (max-width: 360px) {
+  .topBar { height: 44px; padding-inline: 6px; gap: 4px; }
+  .brand img { width: 64px; }
+  .searchBox { height: 30px; padding-inline: 6px 8px; gap: 4px; }
+  .searchBox input { font-size: 0.74rem; }
+  .topBadge { padding: 0 6px; height: 30px; font-size: 0.66rem; }
+  .topBadge svg { width: 12px; height: 12px; }
+
+  .nowPlaying { padding: 8px 6px; }
+  .nowPlayingTop { gap: 6px; }
+  .coverStack { width: 56px; height: 56px; }
+  .songHero h2 { font-size: 0.92rem; }
+  .artistName { font-size: 0.7rem; }
+  .liveLyric { font-size: 0.7rem; }
+  .heroControls { gap: 6px; margin-top: 8px; }
+  .ghostButton, .playButton { width: 32px; height: 32px; }
+  .playButton { width: 40px; height: 40px; }
+
+  .songListPanel { padding: 6px; }
+  .sectionTitle h2 { font-size: 0.78rem; }
+  .songRow {
+    grid-template-columns: 18px 30px minmax(0, 1fr) auto;
+    padding: 6px;
+    gap: 6px;
+    min-height: 48px;
+  }
+  .rowCover { width: 30px; height: 30px; }
+  .rowIndex { font-size: 0.62rem; }
+  .songMeta strong { font-size: 0.7rem; }
+  .songMeta small { font-size: 0.62rem; }
+  .songTag { display: none; }
+
+  .lyricsStage { padding-block: 8px; gap: 8px; }
+  .songAction { width: 100%; flex: 0 1 auto; }
+  .discWrap {
+    width: clamp(120px, 60vw, 160px);
+    height: clamp(120px, 60vw, 160px);
+    border-width: 3px;
+  }
+  .discWrap::before { width: 14px; height: 14px; margin: -7px 0 0 -7px; border-width: 2px; }
+  .lyricsBox { height: clamp(240px, 48vh, 320px); }
+  .lyricsBox .lyricLine,
+  .lyricsBox .lyricNotice,
+  .lyricsBox .lyricSpacer {
+    font-size: clamp(0.85rem, 4.4vw, 1.05rem);
+    min-height: 46px;
+    padding-inline: 6px;
+  }
+
+  /* .playerBar / .playerCenter / .seekRow / .playerRight at 360px are
+     controlled by the new vertical-stack rules in the @media (max-width:
+     480px) block above. Tighter values applied here would override that
+     stack — keep this block empty for playerBar-related selectors. */
+}
+
+/* ----- 320 — extreme narrow fallback ----------------------------------- */
+@media (max-width: 320px) {
+  .appShell { min-width: 280px; }
+  .topBar { height: 42px; padding-inline: 4px; }
+  .brand img { width: 56px; }
+  .searchBox { height: 28px; }
+  .searchBox input { font-size: 0.7rem; }
+  .topBadge { font-size: 0.6rem; padding: 0 4px; }
+  .lyricsBox { height: 220px; }
+  .lyricsBox .lyricLine,
+  .lyricsBox .lyricNotice,
+  .lyricsBox .lyricSpacer { font-size: 0.85rem; min-height: 40px; }
+  .discWrap { width: 110px; height: 110px; }
+  .playerBar { height: 56px; }
+  .playerButtons .miniPlayButton { width: 28px; height: 28px; }
+  .playerButtons .miniPlayButton::before { width: 28px; height: 28px; }
+}
+
+/* ----- Landscape phones — give the player bar extra breathing room --- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .lyricsPanel { min-height: 0; height: clamp(180px, 60vh, 360px); }
+  .lyricsStage { padding-block: 8px; gap: 12px; }
+  .discWrap { width: clamp(120px, 22vh, 180px); height: clamp(120px, 22vh, 180px); }
+  .lyricsBox { height: clamp(180px, 56vh, 320px); }
+  .nowPlaying { padding: 8px; }
+  .nowPlayingTop { gap: 12px; }
+}
+
+/* ----- Ultra-wide (4K) — keep the layout centered and readable -------- */
+@media (min-width: 1600px) {
+  .lyricsStage { max-width: 1320px; margin-inline: auto; }
+}
+@media (min-width: 2200px) {
+  .lyricsStage { max-width: 1520px; }
+  .discWrap { width: 440px; height: 440px; }
+}
 

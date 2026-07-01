@@ -2298,8 +2298,8 @@ function App() {
                 <div className="songAction">
                   <div className="discWrap">
                     <img
-                      src={resolvedCoverUrl || currentSong.cover}
-                      alt={currentSong.title}
+                      src={resolvedCoverUrl || currentSong?.cover}
+                      alt={currentSong?.title}
                       onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)}
                     />
                   </div>
@@ -2395,37 +2395,37 @@ function App() {
               <div className="coverStack">
                 <img
                   className="coverGlow"
-                  src={resolvedCoverUrl || currentSong.cover}
+                  src={resolvedCoverUrl || currentSong?.cover}
                   alt=""
                   onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)}
                 />
                 <img
                   className="coverBase"
-                  src={resolvedCoverUrl || currentSong.cover}
+                  src={resolvedCoverUrl || currentSong?.cover}
                   alt=""
                   onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)}
                 />
                 <img
                   className="coverRed"
-                  src={resolvedCoverUrl || currentSong.cover}
+                  src={resolvedCoverUrl || currentSong?.cover}
                   alt=""
                   onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)}
                 />
                 <img
                   className="coverCyan"
-                  src={resolvedCoverUrl || currentSong.cover}
+                  src={resolvedCoverUrl || currentSong?.cover}
                   alt=""
                   onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)}
                 />
                 <div className="coverBands">
-                  <div className="coverBand b1"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b2"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b3"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b4"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b5"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b6"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b7"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
-                  <div className="coverBand b8"><img src={resolvedCoverUrl || currentSong.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b1"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b2"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b3"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b4"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b5"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b6"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b7"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
+                  <div className="coverBand b8"><img src={resolvedCoverUrl || currentSong?.cover} alt="" onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)} /></div>
                 </div>
                 <div className="coverFrags">
                   <div className="coverFrag f1" />
@@ -2446,8 +2446,8 @@ function App() {
                   <Waves size={15} />
                   <span>Đang phát</span>
                 </div>
-                <h2>{currentSong.title}</h2>
-<p className="artistName">{currentSong.artist}</p>
+<h2>{currentSong?.title}</h2>
+                <p className="artistName">{currentSong?.artist}</p>
 
             {audioMissing ? (
               <p className="nowPlayingMissing" role="status">
@@ -2568,8 +2568,8 @@ function App() {
               />
             </span>
             <div>
-              <strong>{currentSong.title}</strong>
-              <span>{currentSong.artist}</span>
+              <strong>{currentSong?.title}</strong>
+              <span>{currentSong?.artist}</span>
             </div>
           </div>
         ) : (
@@ -2632,9 +2632,10 @@ function App() {
         <div className="playerRight">
           <button
             type="button"
-            className={isShuffle ? "isToggled" : ""}
+            className={`shuffleButton ${isShuffle ? "isToggled" : ""}`}
             onClick={() => setIsShuffle((v) => !v)}
             aria-label="Shuffle"
+            aria-pressed={isShuffle}
           >
             <Shuffle size={16} />
           </button>

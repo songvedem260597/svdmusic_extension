@@ -4,7 +4,7 @@ export default function AddSongButton({ onClick }) {
   return (
     <button
       type="button"
-      className="topBadgeButton"
+      className="topBadgeButton addSongButton"
       onClick={onClick}
       aria-label="Thêm bài hát từ YouTube"
       title="Thêm bài hát từ YouTube"
