@@ -2178,15 +2178,10 @@ function App() {
 
       {/* Top bar */}
       <header className="topBar">
-        <a className="brand" href="/" aria-label="SVD Music">
+        <a className="brand" href="#" aria-label="SVD Music">
           <img
             src="/images/Logo.png"
             alt="SVD Music"
-            onError={(e) => {
-              if (e.currentTarget.src !== LOGO_SVG) {
-                e.currentTarget.src = LOGO_SVG;
-              }
-            }}
           />
         </a>
 
