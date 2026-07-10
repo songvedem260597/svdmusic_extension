@@ -653,12 +653,21 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         received: "Đã nhận file MP3 từ dịch vụ.",
         ready: "Đã sẵn sàng file MP3.",
         "bridge/open-tab": "Đang mở tab bridge...",
-        "bridge/api-ok": "Đã nhận link MP3 từ dịch vụ...",
+        "bridge/requesting-conversion": "Đang yêu cầu chuyển đổi MP3...",
+        "bridge/link-ready": "Đã nhận link MP3 từ dịch vụ...",
         "bridge/mp3-fetch": "Đang tải file MP3 về...",
         "bridge/mp3-fallback": "Đang tải MP3 qua page context...",
         "bridge/mp3-fetch-invalid":
           "File MP3 trả về không hợp lệ, đang thử lại qua page context...",
         "bridge/mp3-ready": "Đã tải xong dữ liệu MP3, đang kiểm tra...",
+        "mp3cow/open-tab": "Đang mở tab MP3Cow...",
+        "mp3cow/api-ready": "MP3Cow đã sẵn sàng, đang yêu cầu chuyển đổi...",
+        "mp3cow/converting": "MP3Cow đang chuyển đổi, vui lòng chờ...",
+        "mp3cow/redirect": "MP3Cow đang chuyển sang trang xử lý...",
+        "mp3cow/page-api-ok": "Đã nhận link MP3 từ MP3Cow...",
+        "mp3cow/mp3-fetch": "Đang tải file MP3 từ MP3Cow...",
+        "mp3cow/mp3-fetch-ok": "Đã tải xong file MP3 từ MP3Cow.",
+        "mp3cow/mp3-fallback": "Đang tải MP3 qua trang MP3Cow...",
       };
 
       const finalize = (result) => {

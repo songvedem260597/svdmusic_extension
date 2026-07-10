@@ -144,6 +144,18 @@ const ownedYt2mp3Tabs = new Set();
 const MP3COW_BRIDGE_BASE = "https://mp3cow.com";
 const ownedMp3cowTabs = new Set();
 
+function isMp3cowBridgeUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "mp3cow.com" || url.hostname.endsWith(".mp3cow.com"))
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 async function openOrReuseYt2mp3Tab() {
   // We support both the root path and any sub-page of yt2mp3.cloud. If
   // the user already has a tab on this site we reuse it instead of
@@ -241,94 +253,147 @@ async function closeOwnedMp3cowTab(tabId) {
 // the download URL. The caller fetches the MP3 in the background worker.
 function mp3cowConvertMain(youtubeId) {
   var _youtubeId = youtubeId;
-  return new Promise(function (resolve) {
-    if (!_youtubeId || typeof _youtubeId !== "string") {
-      resolve({ __yt2mp3Error: { stage: "NO_LINK", message: "Thiếu youtubeId." } });
-      return;
+  var maxAttempts = 18;
+  var pollDelayMs = 5000;
+
+  function fail(stage, message, status, raw) {
+    return {
+      __yt2mp3Error: {
+        stage: stage,
+        message: message,
+        status: status,
+        raw: raw,
+      },
+    };
+  }
+
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function validHttpUrl(value) {
+    return typeof value === "string" && /^https?:\/\//i.test(value);
+  }
+
+  function extractDownload(parsed, apiStatus) {
+    if (!parsed || typeof parsed !== "object") return "";
+    var candidates = [
+      parsed.download,
+      parsed.download_url,
+      parsed.downloadUrl,
+      parsed.link,
+    ];
+    // MP3Cow's current page uses obj.url only for status "c" redirects.
+    // A status "1" response may safely expose it as a direct file URL.
+    if (apiStatus === "1") candidates.push(parsed.url);
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (validHttpUrl(candidates[i])) return candidates[i];
     }
+    return "";
+  }
+
+  function poll(attempt) {
     var apiUrl =
       "https://api.mp3cow.com/z.php?id=" +
       encodeURIComponent(_youtubeId) +
       "&t=" +
       Date.now();
-    fetch(apiUrl, {
+
+    return fetch(apiUrl, {
       method: "GET",
       mode: "cors",
       credentials: "omit",
       cache: "no-store",
-      headers: {
-        Accept: "application/json, text/plain, */*",
-      },
+      headers: { Accept: "application/json, text/plain, */*" },
     })
       .then(function (response) {
         return response.text().then(function (text) {
           return { response: response, text: text };
         });
       })
-      .then(function (_ref) {
-        var response = _ref.response;
-        var text = _ref.text;
-        var status = response.status;
-        if (status < 200 || status >= 300) {
-          resolve({
-            __yt2mp3Error: {
-              stage: "API_ERROR",
-              message: "API trả HTTP " + status + ".",
-              status: status,
-              raw: text.slice(0, 500),
-            },
-          });
-          return;
+      .then(function (result) {
+        var response = result.response;
+        var text = result.text;
+        var httpStatus = response.status;
+        if (httpStatus < 200 || httpStatus >= 300) {
+          return fail("API_ERROR", "API trả HTTP " + httpStatus + ".", httpStatus, text.slice(0, 500));
         }
+
         var parsed = null;
         try {
           parsed = JSON.parse(text);
         } catch (e) {
-          resolve({
-            __yt2mp3Error: {
-              stage: "API_PARSE_ERROR",
-              message: "API không trả JSON hợp lệ: " + (e && e.message ? e.message : String(e)),
-              raw: text.slice(0, 500),
-            },
-          });
-          return;
+          return fail(
+            "API_PARSE_ERROR",
+            "API không trả JSON hợp lệ: " + (e && e.message ? e.message : String(e)),
+            httpStatus,
+            text.slice(0, 500)
+          );
         }
-        if (
-          !parsed ||
-          parsed.status !== "1" ||
-          !parsed.download ||
-          !/^https?:\/\//.test(parsed.download)
-        ) {
-          resolve({
-            __yt2mp3Error: {
-              stage: "NO_LINK",
-              message:
-                "API không trả download link (status=" +
-                (parsed && parsed.status ? parsed.status : "?") +
-                ", hasDownload=" +
-                !!(parsed && parsed.download) +
-                ").",
-            },
-          });
-          return;
+
+        var apiStatus =
+          parsed && parsed.status !== undefined && parsed.status !== null
+            ? String(parsed.status)
+            : "";
+        var download = extractDownload(parsed, apiStatus);
+        if (download) {
+          return {
+            link: download,
+            title: typeof parsed.title === "string" ? parsed.title : "",
+            duration: null,
+            filesize: null,
+            videoId: typeof parsed.videoId === "string" ? parsed.videoId : _youtubeId,
+            apiStatus: apiStatus,
+          };
         }
-        resolve({
-          link: parsed.download,
-          title: typeof parsed.title === "string" ? parsed.title : "",
-          duration: null,
-          filesize: null,
-          videoId: typeof parsed.videoId === "string" ? parsed.videoId : _youtubeId,
-        });
+
+        if (apiStatus === "c" && validHttpUrl(parsed.url)) {
+          return {
+            redirectUrl: parsed.url,
+            apiStatus: apiStatus,
+          };
+        }
+
+        if (apiStatus === "0" || apiStatus === "p") {
+          return fail(
+            "API_REJECTED",
+            (typeof parsed.message === "string" && parsed.message) ||
+              "MP3Cow từ chối yêu cầu chuyển đổi (status=" + apiStatus + ").",
+            httpStatus,
+            text.slice(0, 500)
+          );
+        }
+
+        // The live MP3Cow page polls the same endpoint every five seconds
+        // while conversion is pending (normally status "3"). Keep waiting
+        // for that state and for transient incomplete payloads instead of
+        // treating the first response as a missing download link.
+        if (attempt + 1 < maxAttempts) {
+          return wait(pollDelayMs).then(function () { return poll(attempt + 1); });
+        }
+
+        return fail(
+          "CONVERSION_TIMEOUT",
+          "MP3Cow chưa trả link sau " + maxAttempts +
+            " lần kiểm tra (status=" + (apiStatus || "missing") + ").",
+          httpStatus,
+          text.slice(0, 500)
+        );
       })
       .catch(function (e) {
-        resolve({
-          __yt2mp3Error: {
-            stage: "API_FETCH_FAILED",
-            message: "fetch() lỗi: " + (e && e.message ? e.message : String(e)),
-          },
-        });
+        return fail(
+          "API_FETCH_FAILED",
+          "fetch() lỗi: " + (e && e.message ? e.message : String(e)),
+          null,
+          ""
+        );
       });
-  });
+  }
+
+  if (!_youtubeId || typeof _youtubeId !== "string") {
+    return Promise.resolve(fail("NO_LINK", "Thiếu youtubeId.", null, ""));
+  }
+  return poll(0);
 }
 
 // Page-context script injected into mp3cow.com to fetch the MP3 file.
@@ -729,7 +794,7 @@ async function fetchMp3FromYt2mp3PageBridge(youtubeUrl, { onProgress } = {}) {
   try {
     await waitForTabComplete(tabId, 30000);
 
-    emit("bridge/api-ok");
+    emit("bridge/requesting-conversion");
     let apiRaw;
     try {
       const [{ result }] = await chrome.scripting.executeScript({
@@ -756,6 +821,7 @@ async function fetchMp3FromYt2mp3PageBridge(youtubeUrl, { onProgress } = {}) {
 
     if (!downloadURL) throw new Error("YT2MP3_API_NO_LINK: response không có link.");
 
+    emit("bridge/link-ready");
     // ── Try 1: SW fetch (no CORS). On ANY failure — network error,
     //    response not OK, invalid Blob from validator — we fall through
     //    to the MAIN-world fetch below. The validator is the same for
@@ -990,28 +1056,56 @@ async function fetchMp3FromMp3cowPageBridge(youtubeUrl, { onProgress } = {}) {
   try {
     await waitForMp3cowTab(tabId, 30000);
 
-    emit("mp3cow/api-ok");
+    emit("mp3cow/api-ready");
 
-    // Step 1: Call api.mp3cow.com/z.php in page context to get download link.
-    let apiRaw;
-    try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId, allFrames: false },
-        world: "MAIN",
-        func: mp3cowConvertMain,
-        args: [videoId],
-      });
-      apiRaw = result;
-    } catch (err) {
-      throw new Error(
-        "MP3COW_INJECT_FAILED: " + (err?.message || String(err))
-      );
+    // The current MP3Cow page may first return status "c" and navigate to
+    // another same-site page before the normal status "1" download result.
+    // Follow that bounded redirect sequence, then ask the page-context
+    // converter again so it shares the same first-party session as the UI.
+    let apiPayload = null;
+    for (let redirectAttempt = 0; redirectAttempt < 3; redirectAttempt += 1) {
+      emit("mp3cow/converting");
+      let apiRaw;
+      try {
+        const [{ result }] = await chrome.scripting.executeScript({
+          target: { tabId, allFrames: false },
+          world: "MAIN",
+          func: mp3cowConvertMain,
+          args: [videoId],
+        });
+        apiRaw = result;
+      } catch (err) {
+        throw new Error(
+          "MP3COW_INJECT_FAILED: " + (err?.message || String(err))
+        );
+      }
+
+      const apiCheck = unwrapInjectedResult(apiRaw);
+      if (!apiCheck.ok) {
+        throw makeMp3cowError(apiCheck.stage, apiCheck.message, apiCheck.status);
+      }
+
+      const nextPayload = apiCheck.value || {};
+      if (!nextPayload.redirectUrl) {
+        apiPayload = nextPayload;
+        break;
+      }
+
+      if (!isMp3cowBridgeUrl(nextPayload.redirectUrl)) {
+        throw new Error("MP3COW_REDIRECT_REJECTED: redirect không thuộc mp3cow.com.");
+      }
+      if (redirectAttempt === 2) {
+        throw new Error("MP3COW_REDIRECT_LOOP: chuyển hướng quá nhiều lần.");
+      }
+
+      emit("mp3cow/redirect");
+      await chrome.tabs.update(tabId, { url: nextPayload.redirectUrl });
+      await waitForMp3cowTab(tabId, 30000);
     }
-    const apiCheck = unwrapInjectedResult(apiRaw);
-    if (!apiCheck.ok) {
-      throw makeMp3cowError(apiCheck.stage, apiCheck.message, apiCheck.status);
+
+    if (!apiPayload) {
+      throw new Error("MP3COW_API_NO_LINK: API không trả payload tải xuống.");
     }
-    const apiPayload = apiCheck.value || {};
     const downloadURL = apiPayload.link;
     const apiTitle = apiPayload.title || videoId;
 

@@ -2150,17 +2150,20 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
   }
 
   function isModelMenuOpen() {
-    const haystack = (document.body && (document.body.innerText || document.body.textContent || "")) || "";
-    if (!haystack) return false;
-    return (
-      haystack.includes("3.1 Flash-Lite") ||
-      haystack.includes("3.5 Flash") ||
-      haystack.includes("3.1 Pro") ||
-      haystack.includes("Cấp độ") ||
-      haystack.includes("Tiêu chuẩn") ||
-      haystack.includes("Mở rộng") ||
-      haystack.includes("Deep Think")
+    // The current trigger can read "Pro Mở rộng" even while its menu is
+    // closed. Only an overlay containing menu-specific choices proves that
+    // the menu is actually open.
+    const menuNeedle =
+      /(?:3\.(?:1|5)\s*(?:flash|pro)|flash-lite|t\u01b0\s*duy\s*m\u1edf\s*r\u1ed9ng|deep\s*think)/i;
+    const roots = document.querySelectorAll(
+      ".cdk-overlay-container, .cdk-overlay-pane, .mat-mdc-menu-panel, mat-menu-panel, [role='menu'], [role='listbox'], [role='dialog']"
     );
+    for (const root of roots) {
+      if (!isElementVisible(root)) continue;
+      const text = (root.innerText || root.textContent || "").replace(/\s+/g, " ");
+      if (menuNeedle.test(text)) return true;
+    }
+    return false;
   }
 
   async function openModelMenu() {
@@ -2207,8 +2210,10 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     ".cdk-overlay-container",
     ".cdk-overlay-pane",
     ".mat-mdc-menu-panel",
+    "mat-menu-panel",
     '[role="menu"]',
     '[role="listbox"]',
+    '[role="dialog"]',
   ];
 
   const MENU_ROW_SELECTOR = [
@@ -2217,6 +2222,8 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     '[role="option"]',
     '[role="menuitemradio"]',
     '[role="menuitemcheckbox"]',
+    "button",
+    '[role="button"]',
     "button[aria-haspopup]",
     "button[aria-expanded]",
   ].join(",");
@@ -2323,6 +2330,50 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     return matches[0];
   }
 
+  const DIRECT_EXPANDED_THINKING_NEEDLE =
+    /(?:t\u01b0\s*duy\s*m\u1edf\s*r\u1ed9ng|gi\u1ea3i\s*quy\u1ebft\s*v\u1ea5n\s*\u0111\u1ec1\s*ph\u1ee9c\s*t\u1ea1p|extended\s*thinking|solve\s*complex\s*problems)/i;
+
+  function hasSelectedMenuState(node) {
+    if (!node) return false;
+    const selectedSelector =
+      '[aria-checked="true"], [aria-selected="true"], [data-selected="true"], input:checked';
+    try {
+      if (node.matches?.(selectedSelector) || node.querySelector?.(selectedSelector)) return true;
+    } catch (_) { /* noop */ }
+    const text = nodeText(node);
+    return /\b(?:check|done)\b/i.test(text) || text.includes("\u2713");
+  }
+
+  async function selectDirectExpandedThinking({ onProgress } = {}) {
+    let match = null;
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      const matches = findMenuRows(DIRECT_EXPANDED_THINKING_NEEDLE);
+      match = pickFirstGemMenuItem(matches);
+      if (match) break;
+      await sleep(200);
+    }
+    if (!match) return null;
+
+    if (hasSelectedMenuState(match.node)) {
+      onProgress?.("Tư duy mở rộng đã được chọn.");
+      return { found: true, selected: true };
+    }
+
+    onProgress?.("Đang chọn Tư duy mở rộng...");
+    realClickAt(match.node, 0.5, 0.5);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await sleep(180);
+      if (
+        hasSelectedMenuState(match.node) ||
+        isThinkingLevelSelectedInPill(readModelThinkingTriggerText())
+      ) {
+        onProgress?.("Tư duy mở rộng đã được chọn.");
+        return { found: true, selected: true };
+      }
+    }
+    return { found: true, selected: false };
+  }
+
   async function selectModel({ onProgress } = {}) {
     const btn = findModelMenuButton();
     if (!btn) {
@@ -2342,20 +2393,18 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
     let option = null;
     for (let attempt = 0; attempt < 15; attempt += 1) {
+      const overlayMatch = pickFirstGemMenuItem(findMenuRows(/3\.1\s*pro/i));
+      if (overlayMatch) {
+        realClickAt(overlayMatch.node, 0.5, 0.5);
+        option = overlayMatch.node;
+        break;
+      }
       option = clickByText(/3\.1\s*pro/i, { roleHints: ["menuitem", "option", "radio"] });
-      if (option) break;
-      option = clickByText(/\bpro\b/i, { roleHints: ["menuitem", "option", "radio"] });
       if (option) break;
       await sleep(300);
     }
     if (!option) {
-      const firstOption = document.querySelector("[role=\"menuitem\"], [role=\"option\"]");
-      if (firstOption) {
-        firstOption.click();
-        onProgress?.("Đã chọn model đầu tiên.");
-      } else {
-        throw new Error("Không tìm thấy model Pro trong menu.");
-      }
+      throw new Error("Không tìm thấy model Pro trong menu.");
     } else {
       onProgress?.("Đã chọn model 3.1 Pro.");
     }
@@ -2388,6 +2437,11 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
       return { found: false };
     }
     await sleep(250);
+
+    // Gemini's current menu exposes "Tư duy mở rộng" as a direct row next
+    // to Deep Think. Prefer it before trying the legacy nested submenu.
+    const directThinkingResult = await selectDirectExpandedThinking({ onProgress });
+    if (directThinkingResult) return directThinkingResult;
 
     // Step 1: locate the "Cấp độ tư duy" row INSIDE the overlay only.
     const levelNeedle = /cấp\s*độ(\s*tư\s*duy)?|thinking|reasoning/i;
