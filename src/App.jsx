@@ -692,21 +692,19 @@ function App() {
   //   "idle"      → no quote yet, show blank
   //   "loading"   → getMoodQuote() is pending; show blank
   //   "typing"    → incrementally append one character per tick
-  //   "hold"      → full text visible for 1.7 s, then jump to "clear"
-  //   "clear"     → text already empty; wait 5 s, then "loading"
+  //   "hold"      → full text remains visible for 2 min, then "loading"
   //
   // Timings (per spec):
   //   character  → (58 + rand(34)) ms  × 1.25  →  72-115 ms
   //   punctuation ,.!?:; → 360 ms  × 1.25  →  450 ms
   //   space → 45 ms  × 1.25  →  56 ms
-  //   hold → 1700 ms
-  //   gap before next quote → 5000 ms  (was 500)
+  //   hold before next API request → 120000 ms
   //
   // The 1.25× factor slows the typing speed by 20% (display still feels
   // organic thanks to the per-char jitter, but reads more deliberately).
 
   const TYPING_SPEED_FACTOR = 1.25;
-  const QUOTE_RESUME_DELAY_MS = 5000;
+  const QUOTE_RESUME_DELAY_MS = 2 * 60 * 1000;
 
   useEffect(() => {
     let cancelled = false;
@@ -730,14 +728,9 @@ function App() {
             setTypingDisplay(quote.slice(0, index + 1));
             timer = setTimeout(() => advance("typing", { quote, index: index + 1 }), getCharDelay(ch));
           } else {
-            // Done — hold full text.
-            timer = setTimeout(() => advance("clear", {}), 1700);
+            // Keep the completed quote on screen until the next API refresh.
+            timer = setTimeout(() => advance("load", {}), QUOTE_RESUME_DELAY_MS);
           }
-          break;
-        }
-        case "clear": {
-          setTypingDisplay("");
-          timer = setTimeout(() => advance("load", {}), QUOTE_RESUME_DELAY_MS);
           break;
         }
         case "load": {

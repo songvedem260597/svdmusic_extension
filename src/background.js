@@ -3022,7 +3022,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // here in the background service worker and translate via MyMemory.
   //
   // Strategy:
-  //   1. Read svd_mood_quote_cache from chrome.storage.local (30 min TTL).
+  //   1. Read svd_mood_quote_cache from chrome.storage.local (2 min TTL).
   //   2. If miss, try ZenQuotes → translate via MyMemory.
   //   3. If ZenQuotes fails (CORS / network), fall back to api.quotable.io.
   //   4. If both providers fail, use a small built-in Vietnamese fallback.
@@ -3043,7 +3043,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ── Mood Quote implementation ─────────────────────────────────────────────────
 
 const MOOD_QUOTE_CACHE_KEY = "svd_mood_quote_cache";
-const MOOD_QUOTE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MOOD_QUOTE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
 const MOOD_QUOTE_FALLBACK = [
   "Có những ngày tuyệt vọng đến cùng cực, tôi và cuộc đời đã tha thứ cho nhau ☘️",

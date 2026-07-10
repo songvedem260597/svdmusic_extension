@@ -4,9 +4,9 @@
 // The background handles CORS-bypass, multi-provider fallback (ZenQuotes →
 // Quotable → local), and an in-flight lock so we never spam the APIs.
 //
-// This module adds a small localStorage cache (30 min) as a second layer of
+// This module adds a small localStorage cache (2 min) as a second layer of
 // dedup so the typing loop can resume instantly when the panel reopens inside
-// the same 30-min window — without any background roundtrip.
+// the same window — without any background roundtrip.
 //
 // If anything fails (network, background dead, schema mismatch), we fall back
 // to a small built-in array of Vietnamese mood quotes.
@@ -14,7 +14,7 @@
 const BG_ACTION = "GET_MOOD_QUOTE";
 
 const CACHE_KEY = "svd_mood_quote_cache";
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
 const FALLBACK_QUOTES = [
   "Có những ngày tuyệt vọng đến cùng cực, tôi và cuộc đời đã tha thứ cho nhau ☘️",
@@ -55,7 +55,7 @@ function writeCache(displayText) {
  * Returns a Vietnamese quote string ending in ☘️.
  *
  * Tries (in order):
- *   1. localStorage cache (30 min TTL) → no network at all.
+ *   1. localStorage cache (2 min TTL) → no network at all.
  *   2. background proxy → ZenQuotes → Quotable → MyMemory translate.
  *   3. Built-in fallback array (random pick).
  *
