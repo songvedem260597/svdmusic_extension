@@ -59,6 +59,7 @@ import {
   readActiveViewTransfer,
   writeActiveViewTransfer,
   updateActiveViewTransfer,
+  upsertActiveViewTransfer,
   clearActiveViewTransfer,
   readSessionValue,
   writeSessionValue,
@@ -2065,11 +2066,34 @@ function App() {
     viewModeLog("restoring pending snapshot after metadata", { snap, snapTransferId });
 
     // Guard: verify the transfer is still active before doing any work.
+    // Self-heals session storage when Chrome dropped our entry mid-restore
+    // (e.g. extension reload, SW crash, or another tab.onRemoved race).
+    // We still bail if the active transfer belongs to a DIFFERENT
+    // transferId — that means a brand-new detach/pin started and we
+    // must not steal it.
     async function checkActiveTransfer() {
       if (!snapTransferId) return true;
       try {
         const active = await readActiveViewTransfer();
         if (!active || active.transferId !== snapTransferId) {
+          // Try to self-heal: re-stamp this transferId as target-restoring.
+          // Uses upsert so an empty session is refilled without clobbering
+          // a newer transfer that has taken the slot.
+          try {
+            const healed = await upsertActiveViewTransfer(
+              snapTransferId,
+              {
+                transferId: snapTransferId,
+                status: "target-restoring",
+                updatedAt: Date.now(),
+              },
+              { status: "target-restoring" },
+            );
+            if (healed && healed.transferId === snapTransferId) {
+              viewModeLog("self-healed stale transfer during restore", snapTransferId);
+              return true;
+            }
+          } catch (_) { /* fall through to abort */ }
           viewModeWarn("transfer no longer active, aborting restore", snapTransferId);
           return false;
         }

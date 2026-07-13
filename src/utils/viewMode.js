@@ -189,6 +189,25 @@ export async function updateActiveViewTransfer(transferId, updates) {
   return next;
 }
 
+/**
+ * Atomic upsert: write the patch only if the session entry either
+ * matches `transferId` or is currently empty. Returns the resulting
+ * transfer object on success, null when another active transfer has
+ * already taken the slot.
+ *
+ * Use this when you need to self-heal a dropped session entry without
+ * accidentally clobbering a newer transfer that was created in the
+ * meantime (e.g. user detached twice in a row).
+ */
+export async function upsertActiveViewTransfer(transferId, fallback, updates) {
+  const active = await readActiveViewTransfer();
+  if (active && active.transferId !== transferId) return null;
+  const base = active || fallback || { transferId };
+  const next = { ...base, ...updates, transferId };
+  await writeActiveViewTransfer(next);
+  return next;
+}
+
 export async function clearActiveViewTransfer(transferId) {
   const active = await readActiveViewTransfer();
   if (!active || active.transferId !== transferId) return false;
