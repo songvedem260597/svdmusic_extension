@@ -602,7 +602,7 @@ button {
   font-size: 0.85rem;
 }
 
-.songHero h2 {
+.songHero h3 {
   margin: 0;
   overflow-wrap: anywhere;
   font-size: clamp(2.16rem, 4vw, 4.4rem);
