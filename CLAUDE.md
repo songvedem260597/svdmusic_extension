@@ -1,11 +1,54 @@
 # SVD Music Extension - Development Notes
-
 ## Extension Info
 - Name: SVD Music Player
 - Extension ID: oeaflhcgbcnppfldjdcmldkikokkiddc
 - Manifest Version: 3
 
 ## Version Changelog
+
+### v1.1.7-hotfix (2026-07-14)
+- Pin back: popup window did not self-close after SIDEPANEL_READY.
+ - Root cause: `handlePinBackToSidePanel` in App.jsx read `popupWindowId` from session storage AFTER READY. Session state could already be cleared/overwritten, or message handler fails silently.
+ - Fix 1 — `handlePinBackToSidePanel` (App.jsx): capture `popupWindowId` at the START of pin back via `chrome.windows.getCurrent()`. Stash in local const for the whole flow. Use it instead of session read.
+ - Fix 2 — `closeStandalonePopup(windowId, sender)` (background.js): resolve target via chain `message.standaloneWindowId → sender.tab.windowId → stored session`. Read `originWindowId` from session. Validate `target !== originWindowId`. `chrome.windows.get(target)` to check existence. Verify `win.type === 'popup'`. Only then call `chrome.windows.remove(target)`. Return `{ ok, removedWindowId }` or `{ ok: false, error }`.
+ - Fix 3 — `player/close-standalone-popup` handler now passes `sender` and wraps execution in try/catch.
+ - Added UI logs `[PIN_BACK] START / SIDEPANEL_READY / CLOSE_RESULT / TIMEOUT` and SW logs `[SW] CLOSE_STANDALONE_POPUP / POPUP_REMOVED`.
+ - Cleanup ordering preserved: `chrome.windows.remove` first; `chrome.windows.onRemoved` cleans session state only on real removal.
+ - Build OK: sidepanel-*.js 506.01 → 507.60 kB (gzip 112.38 → 112.66 kB); CSS unchanged.
+
+### v1.1.7 (2026-07-13)
+- Standalone: migrated from `chrome.tabs.create` (regular tab) to `chrome.windows.create({ type: 'popup' })` — OS-native popup window with no URL bar, no tab strip.
+ - `openStandalonePopup` in background.js calculates popup bounds: 88% of origin window, min 1000×680, centered.
+ - `originWindowId` captured before popup creation (via `chrome.windows.getCurrent()`).
+ - `svdmusic.standaloneWindowId` is the primary tracker (replacing `standaloneTabId`).
+ - `svdmusic.standaloneTabId` still stored for the child tab id within the popup.
+ - Duplicate popup guard: checks `svdmusic.standaloneWindowId` + `chrome.windows.get()` before creating a new popup.
+ - Detach flow: Side Panel → popup via SW message `player/standalone-opened` → `chrome.windows.create`. After `STANDALONE_READY` with matching `transferId`, Side Panel closed via `chrome.sidePanel.close({ windowId: originWindowId })`.
+ - Pin back flow: popup → Side Panel via `chrome.sidePanel.open({ windowId: originWindowId })` in user gesture. After `SIDEPANEL_READY`, popup closed via `player/close-standalone-popup` → `chrome.windows.remove(popupWindowId)`.
+ - `chrome.windows.onRemoved` listener cleans up all popup session metadata; no auto-reopen when user closes popup via OS X button.
+ - `src/App.jsx`: `isPopupSurface = detectPopupSurface()`, root class `svdmusic-surface-popup`, duplicate-guard updated, `player/close-standalone-popup` message, mount READY payloads include window IDs.
+ - `src/utils/viewMode.js`: added `SURFACE_QUERY_KEY`, `POPUP_SURFACE`, `detectPopupSurface()`, `STANDALONE_WINDOW_ID_KEY`, `POPUP_BOUNDS_KEY`, `standaloneWindowId` in `createViewTransfer()`.
+ - `src/styles.css` (appended): popup CSS rules for `html/body { overflow: hidden }`, `#root`, `.appShell.svdmusic-surface-popup`, `.pageGrid`, `.songList`.
+ - Standalone URL now includes `surface=popup` query param for surface detection.
+ - Manifest bumped 1.1.6 → 1.1.7; permissions unchanged.
+ - Build output: `dist/assets/sidepanel-*.css` 138.65 kB (gzip 28.66 kB); `dist/assets/sidepanel-*.js` 506.01 kB (gzip 112.38 kB).
+
+### v1.1.6 (2026-07-13)
+- Add sidepanel ↔ standalone view-mode (open player in a regular Chrome tab and pin it back to the Side Panel)
+ - New `Maximize2` / `Pin` button in `.topBarActions`, next to the library badge, with proper tooltip + aria-label
+ - Standalone URL: `chrome.runtime.getURL('sidepanel.html?view=standalone')` — same React tree, detected via `?view=standalone`
+ - Audio ownership via `BroadcastChannel('svdmusic-player-view')` between the two contexts:
+   - `view-ready`, `ownership-handoff`, `view-closing` messages
+   - Only the owner may call `audio.play()` (gate added to `playAudio()`)
+   - New view does not autoplay on mount; it waits for the snapshot the prior owner hands off
+ - New files: `src/utils/viewMode.js`, `src/components/ViewModeButton.jsx`, `src/components/ViewModeToast.jsx`
+ - SW plumbing (already present in v1.1.5): `player/standalone-opened`, `player/sidepanel-open`, `player/sidepanel-close`, `player/close-standalone-tab`, `player/standalone-closed`
+ - Duplicate-tab guard: before `chrome.tabs.create`, queries for an existing standalone tab and focuses it
+ - Snapshot persists to `playbackSessionStorage` (v2 schema) so the receiving side can recover even if the BroadcastChannel handshake fails
+ - Root class `svdmusic-view-sidepanel` / `svdmusic-view-standalone` so CSS can drop the 1480px cap on the standalone surface
+ - Toast for the failure cases (chrome.tabs.create failed, sidePanel.open failed) — no silent failures
+ - Manifest permissions unchanged (sidePanel + tabs already declared)
+ - Build output: `dist/assets/sidepanel-*.js` 470 → 488.64 kB (gzip 100 → 109.45 kB); CSS 125.09 → 136.63 kB (gzip 24.83 → 28.11 kB)
 
 ### v1.1.5 (2026-07-02)
 - Comprehensive responsive CSS layer added at the END of `src/styles.css`

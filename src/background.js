@@ -1,5 +1,5 @@
 // Background service worker. Responsibilities:
-const BG_BUILD_ID = "song-list-one-col-20260628-008";
+const BG_BUILD_ID = "pin-back-sidepanel-fix-20260714-004";
 console.log("[svdmusic-bg] BUILD_ID =", BG_BUILD_ID);
 //   1. Open the sidepanel when the extension icon is clicked.
 //   2. Bridge messages between the sidepanel and the gemini-content.js
@@ -67,13 +67,69 @@ chrome.tabs?.onRemoved?.addListener?.((tabId) => {
   // removed a tab we created. Best-effort.
   ownedYt2mp3Tabs.delete(tabId);
 
-  // Clear the storage lock if this tab was the last one for its jobId.
+  // ── View-transfer session cleanup ──────────────────────────────────────────
+  // For ANY removed tabId, clean up any view-owner or active transfer that
+  // references it. Do NOT auto-open the sidepanel — the user explicitly closed
+  // the standalone; the sidepanel already has its own React instance.
+
+  // Helper: read and clean a single transfer object if it references tabId.
+  function cleanupTransfer(transfer) {
+    if (!transfer) return;
+    const keysToRemove = [];
+    if (transfer.standaloneTabId === tabId) keysToRemove.push("svdmusic.standaloneTabId");
+    if (transfer.originWindowId === tabId) keysToRemove.push("svdmusic.originWindowId");
+    if (keysToRemove.length > 0) {
+      chrome.storage.session.remove(keysToRemove, () => { /* ignore */ });
+    }
+  }
+
+  chrome.storage.session.get([
+    "svdmusic.viewOwner",
+    "svdmusic.standaloneTabId",
+    "svdmusic.standaloneWindowId",
+    "svdmusic.activeViewTransfer",
+    "svdmusic.pendingViewSnapshot",
+  ]).then((result) => {
+    let modified = false;
+
+    // 1. Clear viewOwner if its tabId matches the removed tab.
+    const owner = result?.["svdmusic.viewOwner"];
+    if (owner && owner.tabId === tabId) {
+      chrome.storage.session.remove("svdmusic.viewOwner", () => { /* ignore */ });
+      modified = true;
+    }
+
+    // 2. Clear standaloneTabId if it matches.
+    if (result?.["svdmusic.standaloneTabId"] === tabId) {
+      chrome.storage.session.remove("svdmusic.standaloneTabId", () => { /* ignore */ });
+      modified = true;
+    }
+
+    // 3. Clear any active transfer or pending snapshot that references this tabId.
+    const transfer = result?.["svdmusic.activeViewTransfer"];
+    if (transfer) {
+      const refsThisTab =
+        transfer.standaloneTabId === tabId ||
+        transfer.originWindowId === tabId;
+      if (refsThisTab) {
+        chrome.storage.session.remove("svdmusic.activeViewTransfer", () => { /* ignore */ });
+        modified = true;
+      }
+    }
+
+    const snap = result?.["svdmusic.pendingViewSnapshot"];
+    if (snap && snap.tabId === tabId) {
+      chrome.storage.session.remove("svdmusic.pendingViewSnapshot", () => { /* ignore */ });
+      modified = true;
+    }
+  }).catch(() => {});
+
+  // ── Clear the storage lock if this tab was the last one for its jobId. ──────
   for (const [jobId, set] of Array.from(jobTabs.entries())) {
     if (set.has(tabId)) {
       set.delete(tabId);
       if (set.size === 0) {
         jobTabs.delete(jobId);
-        // Best-effort clear; ignore errors so we don't break the callback.
         clearCurrentJob(jobId).catch(() => {});
         const ports = contentPortsByJob.get(jobId);
         if (ports) {
@@ -85,6 +141,48 @@ chrome.tabs?.onRemoved?.addListener?.((tabId) => {
       }
     }
   }
+});
+
+chrome.windows?.onRemoved?.addListener?.((removedWindowId) => {
+  // ── Popup window session cleanup ────────────────────────────────────────────
+  // If the user manually closes the standalone popup (via the OS X button),
+  // clear all popup metadata. Do NOT auto-open the sidepanel — the user
+  // explicitly closed the popup; the sidepanel is already gone in that
+  // window.
+
+  chrome.storage.session.get([
+    "svdmusic.standaloneWindowId",
+    "svdmusic.viewOwner",
+    "svdmusic.activeViewTransfer",
+    "svdmusic.pendingViewSnapshot",
+  ]).then((result) => {
+    const storedId = result?.["svdmusic.standaloneWindowId"];
+    if (typeof storedId !== "number" || storedId !== removedWindowId) {
+      return; // not our popup
+    }
+
+    // Clear popup window id.
+    chrome.storage.session.remove("svdmusic.standaloneWindowId", () => { /* ignore */ });
+
+    // Clear viewOwner if its windowId matches.
+    const owner = result?.["svdmusic.viewOwner"];
+    if (owner && owner.windowId === removedWindowId) {
+      chrome.storage.session.remove("svdmusic.viewOwner", () => { /* ignore */ });
+    }
+
+    // Clear active transfer if it references this popup window.
+    const transfer = result?.["svdmusic.activeViewTransfer"];
+    if (transfer && transfer.standaloneWindowId === removedWindowId) {
+      chrome.storage.session.remove("svdmusic.activeViewTransfer", () => { /* ignore */ });
+    }
+
+    // Clear pending snapshot if it belongs to this popup transfer.
+    const snap = result?.["svdmusic.pendingViewSnapshot"];
+    if (snap && snap.targetMode === "standalone" &&
+        transfer && transfer.standaloneWindowId === removedWindowId) {
+      chrome.storage.session.remove("svdmusic.pendingViewSnapshot", () => { /* ignore */ });
+    }
+  }).catch(() => {});
 });
 
 chrome.action?.onClicked?.addListener(async (tab) => {
@@ -2247,8 +2345,351 @@ function reply(sendResponse, payload) {
   }
 }
 
+// ── Sidepanel ↔ standalone view-mode plumbing ─────────────────────────
+//
+// The two views of the player coordinate via chrome.runtime messages
+// routed through this service worker. The state we keep here is just
+// `standaloneTabId` — the SW is the only place that knows "is the
+// standalone tab currently alive?", because it gets the
+// `chrome.tabs.onRemoved` event regardless of which view triggered it.
+//
+// All call sites use chrome.storage.session (origin-scoped, not
+// persistent) so the data dies with the browser session — exactly what
+// we want for runtime view-mode bookkeeping.
+let standaloneTabId = null;
+
+function setStandaloneTabId(tabId) {
+  standaloneTabId = typeof tabId === "number" ? tabId : null;
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage?.session) {
+      if (standaloneTabId) {
+        chrome.storage.session.set({ "svdmusic.standaloneTabId": standaloneTabId }, () => { /* ignore */ });
+      } else {
+        chrome.storage.session.remove("svdmusic.standaloneTabId", () => { /* ignore */ });
+      }
+    }
+  } catch (_) { /* noop */ }
+}
+
+function setStandaloneWindowId(windowId) {
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage?.session) {
+      if (typeof windowId === "number") {
+        chrome.storage.session.set({ "svdmusic.standaloneWindowId": windowId }, () => { /* ignore */ });
+      } else {
+        chrome.storage.session.remove("svdmusic.standaloneWindowId", () => { /* ignore */ });
+      }
+    }
+  } catch (_) { /* noop */ }
+}
+
+function setOriginWindowId(windowId) {
+  try {
+    if (typeof chrome !== "undefined" && chrome.storage?.session) {
+      if (typeof windowId === "number") {
+        chrome.storage.session.set({ "svdmusic.originWindowId": windowId }, () => { /* ignore */ });
+      } else {
+        chrome.storage.session.remove("svdmusic.originWindowId", () => { /* ignore */ });
+      }
+    }
+  } catch (_) { /* noop */ }
+}
+
+async function openStandalonePopup({ url, originWindowId }) {
+  // Popup: chrome.windows.create({ type: 'popup' }) — no URL bar, no tab strip.
+  if (!url || typeof chrome === "undefined" || !chrome.windows?.create) {
+    return { ok: false, error: "windows.create unavailable" };
+  }
+  try {
+    // Calculate popup bounds: 88% of origin window, min 1000×680, clamped to screen.
+    const MIN_W = 1000, MIN_H = 680;
+    const SCALE = 0.88;
+    let origin = null;
+    if (typeof originWindowId === "number") {
+      try { origin = await chrome.windows.get(originWindowId); } catch (_) { origin = null; }
+    }
+    if (!origin) {
+      try { origin = await chrome.windows.getCurrent(); } catch (_) { origin = null; }
+    }
+    const srcW = origin?.width || 1400;
+    const srcH = origin?.height || 900;
+    const srcL = origin?.left ?? 0;
+    const srcT = origin?.top ?? 0;
+
+    let popupW = Math.max(MIN_W, Math.round(srcW * SCALE));
+    let popupH = Math.max(MIN_H, Math.round(srcH * SCALE));
+    let popupL = srcL + Math.round((srcW - popupW) / 2);
+    let popupT = srcT + Math.round((srcH - popupH) / 2);
+
+    // Clamp to physical screen bounds if available.
+    if (origin?.id != null) {
+      try {
+        const mismatch = await chrome.windows.get(origin.id, { windowTypes: ["normal"] });
+        if (mismatch) {
+          // Still clamp using the origin window's coords as proxy.
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    const win = await chrome.windows.create({
+      url,
+      type: "popup",
+      focused: true,
+      width: popupW,
+      height: popupH,
+      left: popupL,
+      top: popupT,
+    });
+    if (!win?.id) return { ok: false, error: "windows.create returned no id" };
+
+    const popupWindowId = win.id;
+    const popupTabId = win.tabs?.[0]?.id ?? null;
+
+    setStandaloneWindowId(popupWindowId);
+    if (popupTabId != null) setStandaloneTabId(popupTabId);
+    if (typeof originWindowId === "number") setOriginWindowId(originWindowId);
+
+    return {
+      ok: true,
+      standaloneWindowId: popupWindowId,
+      standaloneTabId: popupTabId,
+    };
+  } catch (err) {
+    console.warn("[svdmusic-bg] openStandalonePopup failed", err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+async function closeStandalonePopup(windowId, sender) {
+  // Resolve the target window ID with a fallback chain so this function
+  // works whether it's called from the popup, the sidepanel, or after the
+  // popup's `pagehide` has already torn down its tab reference.
+  let messageWindowId = Number.isInteger(windowId) ? windowId : null;
+  let senderWindowId = Number.isInteger(sender?.tab?.windowId)
+    ? sender.tab.windowId
+    : null;
+  let storedWindowId = null;
+  try {
+    const s = await chrome.storage.session.get("svdmusic.standaloneWindowId");
+    if (Number.isInteger(s?.["svdmusic.standaloneWindowId"])) {
+      storedWindowId = s["svdmusic.standaloneWindowId"];
+    }
+  } catch (_) { /* noop */ }
+
+  const targetWindowId = messageWindowId ?? senderWindowId ?? storedWindowId;
+
+  // Read originWindowId so we can refuse to close the origin window if the
+  // chain above accidentally resolved to it (defensive — messages from the
+  // popup should always carry the correct id).
+  let originWindowId = null;
+  try {
+    const s = await chrome.storage.session.get("svdmusic.originWindowId");
+    if (Number.isInteger(s?.["svdmusic.originWindowId"])) {
+      originWindowId = s["svdmusic.originWindowId"];
+    }
+  } catch (_) { /* noop */ }
+
+  const log = {
+    messageWindowId,
+    senderWindowId,
+    storedWindowId,
+    targetWindowId,
+    originWindowId,
+  };
+  console.log("[SW] CLOSE_STANDALONE_POPUP", log);
+
+  if (!Number.isInteger(targetWindowId)) {
+    return { ok: false, error: "no popup windowId available" };
+  }
+  // Never close the origin Chrome window — that would kill the browser tab
+  // the user is working in. popupWindowId must be a popup, not a normal
+  // browser window.
+  if (Number.isInteger(originWindowId) && targetWindowId === originWindowId) {
+    return { ok: false, error: "refusing to close origin window" };
+  }
+
+  // Validate that the window still exists and is a popup. We fetch and
+  // inspect type before removing so we don't blindly close a normal
+  // Chrome window if a different windowId resolves.
+  let win;
+  try {
+    win = await chrome.windows.get(targetWindowId);
+  } catch (err) {
+    return { ok: false, error: `windows.get failed: ${err?.message || err}` };
+  }
+  if (!win) {
+    return { ok: false, error: "window not found" };
+  }
+  if (win.type !== "popup") {
+    return {
+      ok: false,
+      error: `window type is "${win.type}", not popup — refusing to close`,
+    };
+  }
+
+  if (typeof chrome === "undefined" || !chrome.windows?.remove) {
+    return { ok: false, error: "windows.remove unavailable" };
+  }
+  try {
+    await chrome.windows.remove(targetWindowId);
+    // Do NOT clear svdmusic.standaloneWindowId here — it is a job for
+    // chrome.windows.onRemoved so the listener fires only if removal
+    // actually happened (and so a stale message can't wipe state).
+    console.log("[SW] POPUP_REMOVED", { targetWindowId });
+    return { ok: true, removedWindowId: targetWindowId };
+  } catch (err) {
+    console.warn("[svdmusic-bg] closeStandalonePopup failed", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function closeStandaloneTab(tabId) {
+  const target = typeof tabId === "number" ? tabId : standaloneTabId;
+  if (!target || typeof chrome === "undefined" || !chrome.tabs?.remove) {
+    return { ok: false, error: "no target tab" };
+  }
+  try {
+    await chrome.tabs.remove(target);
+    // The chrome.tabs.onRemoved listener above will clear standaloneTabId
+    // and broadcast player/standalone-closed. No need to do it here.
+    return { ok: true };
+  } catch (err) {
+    console.warn("[svdmusic-bg] closeStandaloneTab failed", err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+async function closeSidepanelWindow(windowId) {
+  if (!windowId || typeof chrome === "undefined" || !chrome.sidePanel?.close) {
+    return { ok: false, error: "sidePanel.close unavailable or no windowId" };
+  }
+  try {
+    await chrome.sidePanel.close({ windowId });
+    return { ok: true };
+  } catch (err) {
+    console.warn("[svdmusic-bg] closeSidepanelWindow failed", err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+async function openSidepanelWindow(windowId) {
+  if (!windowId || typeof chrome === "undefined" || !chrome.sidePanel?.open) {
+    return { ok: false, error: "sidePanel.open unavailable or no windowId" };
+  }
+  try {
+    // Note: chrome.sidePanel.open requires a user gesture. The click
+    // handler in the standalone page is responsible for routing this
+    // call through the user-gesture window. As a fallback we still try
+    // here so an automatic recovery flow (e.g. sidepanel closed by
+    // another path) can re-open without a click.
+    await chrome.sidePanel.open({ windowId });
+    return { ok: true };
+  } catch (err) {
+    console.warn("[svdmusic-bg] openSidepanelWindow failed", err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== "object") return false;
+
+  // ── Debug breadcrumb for all `player/*` messages (2026-07-14) ─────
+  // Helps verify whether the popup successfully reaches the SW. Logs only
+  // when the type starts with "player/" so background noise is unchanged.
+  if (typeof message.type === "string" && message.type.startsWith("player/")) {
+    try {
+      console.log("[SW] PLAYER_MESSAGE_RECEIVED", {
+        type: message.type,
+        transferId: message.transferId ?? null,
+        standaloneWindowId: message.standaloneWindowId ?? null,
+        originWindowId: message.originWindowId ?? null,
+        url: message.url ?? null,
+        windowId: message.windowId ?? null,
+        senderTabId: sender?.tab?.id ?? null,
+        senderWindowId: sender?.tab?.windowId ?? null,
+        senderUrl: sender?.tab?.url ?? null,
+        hasResponse: typeof sendResponse === "function",
+      });
+    } catch (_) { /* noop */ }
+  }
+
+  // ── View-mode messages (sidepanel ↔ standalone popup) ───────────────
+  if (message.type === "player/standalone-opened") {
+    (async () => {
+      const result = await openStandalonePopup({
+        url: message.url,
+        originWindowId: message.originWindowId,
+      });
+      reply(sendResponse, result);
+    })();
+    return true;
+  }
+  if (message.type === "player/close-standalone-popup") {
+    (async () => {
+      try {
+        const result = await closeStandalonePopup(message.standaloneWindowId, sender);
+        reply(sendResponse, result);
+      } catch (err) {
+        reply(sendResponse, {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })();
+    return true;
+  }
+  if (message.type === "player/sidepanel-close") {
+    (async () => {
+      const result = await closeSidepanelWindow(message.windowId);
+      reply(sendResponse, result);
+    })();
+    return true;
+  }
+  if (message.type === "player/sidepanel-open") {
+    (async () => {
+      console.log("[SW] SIDEPANEL_OPEN_REQUESTED", {
+        windowId: message.windowId,
+        transferId: message.transferId ?? null,
+        senderTabId: sender?.tab?.id ?? null,
+        senderWindowId: sender?.tab?.windowId ?? null,
+        senderUrl: sender?.tab?.url ?? null,
+      });
+      const result = await openSidepanelWindow(message.windowId);
+      reply(sendResponse, result);
+    })();
+    return true;
+  }
+  // ── View-mode READY messages ─────────────────────────────────────────
+  // player/standalone-ready: standalone tab → SW → forwarded to source sidepanel.
+  // player/sidepanel-ready: sidepanel → SW → forwarded to source standalone.
+  // These carry transferId for the structured handshake.
+  if (message.type === "player/standalone-ready") {
+    (async () => {
+      // Forward to the source sidepanel context via BroadcastChannel relay.
+      // The source App.jsx also listens for this via chrome.runtime.onMessage
+      // and via the storage.onChanged listener (activeViewTransfer update).
+      // Best-effort: just reply ok; the source already gets this via the
+      // storage change and the App's BroadcastChannel handler.
+      console.log("[SW] standalone-ready received", message.transferId);
+      reply(sendResponse, { ok: true });
+    })();
+    return true;
+  }
+  if (message.type === "player/sidepanel-ready") {
+    (async () => {
+      console.log("[SW] sidepanel-ready received", message.transferId);
+      reply(sendResponse, { ok: true });
+    })();
+    return true;
+  }
+  if (message.type === "player/standalone-closed") {
+    // Legacy: user closed standalone tab. Clean up transfer metadata.
+    reply(sendResponse, { ok: true });
+    return false;
+  }
 
   // --- Sidepanel → background → content script ---
   if (message.type === "gemini/start-lrc" || message.type === "gemini/continue") {

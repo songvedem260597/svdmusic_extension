@@ -1,8 +1,10 @@
 import {
   Headphones,
   ListMusic,
+  Maximize2,
   Mic,
   Pause,
+  Pin,
   Play,
   Plus,
   Repeat,
@@ -38,6 +40,8 @@ import SettingsModal, {
   useAppSettings,
 } from "./components/SettingsModal.jsx";
 import SongLibraryPopover from "./components/SongLibraryPopover.jsx";
+import ViewModeButton from "./components/ViewModeButton.jsx";
+import ViewModeToast from "./components/ViewModeToast.jsx";
 import WeatherWidget from "./components/WeatherWidget.jsx";
 import { getMoodQuote } from "./services/moodQuoteApi.js";
 import {
@@ -46,6 +50,34 @@ import {
   resumeBassReactiveCover,
   disposeBassReactiveCover,
 } from "./utils/bassReactiveCover.js";
+import {
+  detectViewMode,
+  detectPopupSurface,
+  getTransferIdFromUrl,
+  getStandaloneUrl,
+  createViewTransfer,
+  readActiveViewTransfer,
+  writeActiveViewTransfer,
+  updateActiveViewTransfer,
+  clearActiveViewTransfer,
+  readSessionValue,
+  writeSessionValue,
+  removeSessionValue,
+  ACTIVE_VIEW_TRANSFER_KEY,
+  VIEW_OWNER_KEY,
+  STANDALONE_TAB_ID_KEY,
+  STANDALONE_WINDOW_ID_KEY,
+  ORIGIN_WINDOW_ID_KEY,
+  STANDALONE,
+  SIDEPANEL,
+  VIEW_TRANSFER_TIMEOUT_MS,
+  isMeaningfulSnapshot,
+  postViewMessage,
+  subscribeViewMessages,
+  buildPlaybackSnapshot,
+  viewModeLog,
+  viewModeWarn,
+} from "./utils/viewMode.js";
 
 const COVER_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect fill='%231e3a5f' width='200' height='200'/%3E%3Ccircle cx='100' cy='100' r='60' fill='none' stroke='%2300ffb3' stroke-width='4'/%3E%3Ccircle cx='100' cy='100' r='8' fill='%2300ffb3'/%3E%3C/svg%3E";
 const BANNER_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1280 720'%3E%3Crect fill='%230b1220' width='1280' height='720'/%3E%3C/svg%3E";
@@ -100,7 +132,45 @@ function playbackDebugWarn(...args) {
   } catch (_) { /* noop */ }
 }
 
+// ── View-transfer helpers (used inside App component) ──────────────────────
+
+async function readViewOwner() {
+  return readSessionValue(VIEW_OWNER_KEY);
+}
+
+async function writeViewOwner(mode, instanceId, tabId) {
+  return writeSessionValue(VIEW_OWNER_KEY, {
+    mode,
+    instanceId,
+    tabId: tabId ?? null,
+    updatedAt: Date.now(),
+  });
+}
+
+async function clearViewOwnerIfMatches(instanceId) {
+  try {
+    const owner = await readViewOwner();
+    if (owner && owner.instanceId === instanceId) {
+      await removeSessionValue(VIEW_OWNER_KEY);
+    }
+  } catch (_) { /* noop */ }
+}
+
 function App() {
+  // Stable per-instance identifier. Used to arbitrate audio ownership
+  // between the sidepanel and standalone tab contexts — a UUID created once
+  // at mount so the same instance is recognisable even across page reloads.
+  const instanceIdRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : String(Math.random()) + String(Date.now())
+  );
+
+  // Audio-ownership gate ref — checked synchronously inside audio.play() calls.
+  // Set to true only when this instance holds the chrome.storage.session owner
+  // record. Unlike `ownsAudio` React state, this ref is immune to stale-closure
+  // races inside RAF / event handlers that run after the owning view unmounts.
+  const ownsAudioRef = useRef(false);
+
   const audioRef = useRef(null);
   const lyricsBoxRef = useRef(null);
   const lyricLineRefs = useRef([]);
@@ -158,6 +228,21 @@ function App() {
   // empty". This guard stops the empty-library effect from clobbering a
   // freshly-loaded playback session on first mount.
   const libraryHydratedRef = useRef(false);
+
+  // Holds the incoming playback snapshot while a transfer target is
+  // restoring playback. Cleared only after the snapshot has been fully
+  // applied (song matched + metadata loaded + seek succeeded).
+  // This prevents the pre-mount restore effect from clobbering the
+  // incoming handoff with a stale zero-state.
+  const pendingViewSnapshotRef = useRef(null);
+
+  // True while a transfer is mid-flight and the source might need to rollback.
+  // Used to suppress pause-persist saves during transfer rollback.
+  const isTransferringRef = useRef(false);
+
+  // Tracks pending async cleanup (e.g. close-tab after READY received)
+  // so it can be cancelled if a rollback races in.
+  const viewTransferCleanupRef = useRef(null);
 
   // Mount-time diagnostic — runs exactly once via useEffect([]), NOT on
   // every render. (Earlier revisions put the log in the render body which
@@ -270,6 +355,34 @@ function App() {
   const [resolvedBannerUrl, setResolvedBannerUrl] = useState("");
   const [audioMissing, setAudioMissing] = useState(false);
   const [audioLoadError, setAudioLoadError] = useState("");
+
+  // Sidepanel ↔ standalone view-mode bookkeeping.
+  // `surfaceMode` is derived once from `location.search` and never flips
+  // for the lifetime of this App instance — a reload is the only way
+  // to switch contexts, which is exactly what we want.
+  // NOTE: this variable intentionally avoids the name `viewMode` because
+  // that name is already used by the existing React state for the
+  // "list | lyrics" toggle. Renaming the existing state would touch
+  // dozens of unrelated call sites; the new surface-mode value lives
+  // alongside it under a different name.
+  const surfaceMode = detectViewMode();
+  const isStandalone = surfaceMode === "standalone";
+  // True when the standalone surface is a popup window (not a regular tab).
+  const isPopupSurface = detectPopupSurface();
+  // True while a detach/pin click is mid-flight. Disables the
+  // view-mode button so the user can't double-click.
+  const [isViewTransitioning, setIsViewTransitioning] = useState(false);
+  // Short user-visible toast for errors that aren't already surfaced
+  // (open tab failed, sidePanel.open failed, restore failed, etc).
+  const [viewModeToast, setViewModeToast] = useState("");
+  // Local audio-ownership flag — mirrors what the BroadcastChannel
+  // handshake established. Only the owner may call `audio.play()`.
+  // We start as the owner because:
+  //   - there's at most one view alive on mount (user can't open two
+  //     simultaneously).
+  //   - if the other view comes alive later, it sends REQUEST_OWNERSHIP
+  //     and we drop to non-owner.
+  const [ownsAudio, setOwnsAudio] = useState(true);
 
   // Revokers for the object URLs above; populated lazily by the asset
   // resolution effect below.
@@ -1192,6 +1305,13 @@ function App() {
       appendMissingAudioNotice();
       return;
     }
+    // Audio ownership gate. Only the active view (sidepanel or
+    // standalone) may call play(). The non-owner keeps its <audio>
+    // paused and its UI responsive so a subsequent swap is instant.
+    if (!ownsAudio) {
+      viewModeLog("playAudio blocked: not the audio owner");
+      return;
+    }
     audio.play().then(() => setIsPlaying(true)).catch(() => {
       setIsPlaying(false);
     });
@@ -1425,7 +1545,10 @@ function App() {
       setIsPlaying(false);
       return;
     }
-    audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    // Route through playAudio() so the ownership gate applies
+    // uniformly — a lyric click in the non-owner view should not
+    // start audio playback.
+    playAudio();
   }
 
   function handleEnded() {
@@ -1760,7 +1883,10 @@ function App() {
     // Snapshot the timestamp now so reloading the extension restores the
     // paused position exactly, even if the throttled save effect above
     // hadn't ticked since the last seek.
-    if (currentSong) {
+    // Skip if a view transfer is mid-flight — the source side is about to
+    // lose ownership and a snapshot from the rolling-back instance would
+    // clobber the session with a post-pause time.
+    if (currentSong && !isTransferringRef.current) {
       // force=true: pause is an explicit user action and should always
       // be written, regardless of throttle.
       persistPlaybackSession("pause", { force: true });
@@ -1827,9 +1953,1171 @@ function App() {
     viewMode === "lyrics" ? "viewLyrics lyricsView" : "homeView",
     activeBackgroundImage ? "hasCustomBg" : "",
     theme === "light" ? "theme-light" : "theme-dark",
+    `svdmusic-view-${surfaceMode}`,
+    isPopupSurface ? "svdmusic-surface-popup" : "",
   ]
     .filter(Boolean)
     .join(" ");
+
+  // ── Sidepanel ↔ standalone: snapshot + ownership helpers ──────────────
+  //
+  // These helpers are defined here (after `currentSong` / `currentIndex`
+  // are stable for this render) so the click handlers below can capture
+  // the live state via refs. We never call `persistPlaybackSession`
+  // directly — the existing throttle / restore guards in
+  // `persistPlaybackSession` already cover all the awkward
+  // "during-restore" timing windows, and we route every transition
+  // through the same helper so the on-disk record stays canonical.
+  function capturePlaybackSnapshot() {
+    const audio = audioRef.current;
+    const liveTime =
+      audio && Number.isFinite(audio.currentTime)
+        ? audio.currentTime
+        : currentTimeRef.current;
+    const liveDuration =
+      audio && Number.isFinite(audio.duration) ? audio.duration : duration;
+    return buildPlaybackSnapshot({
+      activeSong: currentSong,
+      currentTime: liveTime,
+      duration: liveDuration,
+      isPlaying,
+      volume,
+      repeatMode,
+      isShuffle,
+      isMuted: isMutedRef.current,
+    });
+  }
+
+  // Force-pause and forget ownership. Used by the current owner right
+  // before a handoff (sidepanel detaches, standalone pins back). Safe
+  // to call when we don't currently own the audio — it no-ops.
+  function releaseAudioOwnershipLocal() {
+    if (!ownsAudio) return;
+    const audio = audioRef.current;
+    if (audio) {
+      try {
+        audio.pause();
+      } catch (_) {
+        /* noop */
+      }
+    }
+    setIsPlaying(false);
+    setOwnsAudio(false);
+  }
+
+  // Async version — writes chrome.storage.session.owner first, then updates
+  // refs. Use this for structured transfer handoffs where the session record
+  // must be in place before any BroadcastChannel message fires.
+  async function acquireAudioOwnership(tabId) {
+    const mode = surfaceMode;
+    const instanceId = instanceIdRef.current;
+    await writeViewOwner(mode, instanceId, tabId ?? null);
+    ownsAudioRef.current = true;
+    setOwnsAudio(true);
+  }
+
+  // Async version — clears ownsAudioRef IMMEDIATELY so no concurrent play()
+  // call races in, then clears the session owner only if it still belongs
+  // to us (another view might have already overwritten it).
+  async function releaseAudioOwnership() {
+    ownsAudioRef.current = false;
+    setOwnsAudio(false);
+    await clearViewOwnerIfMatches(instanceIdRef.current);
+  }
+
+  // Apply a pending view transfer snapshot to live React state.
+  // Called from the storage-change listener when this instance is the
+  // intended target. Blocks normal session restore so the incoming
+  // handoff snapshot takes priority.
+  function applyPendingViewSnapshot(snapshot) {
+    if (!snapshot || !isMeaningfulSnapshot(snapshot)) return;
+    viewModeLog("applying pending view snapshot", snapshot);
+    if (typeof snapshot.volume === "number" && Number.isFinite(snapshot.volume)) {
+      setVolume(Math.max(0, Math.min(100, snapshot.volume)));
+    }
+    if (snapshot.muted === true) {
+      isMutedRef.current = true;
+      if (audioRef.current) audioRef.current.muted = true;
+    }
+    if (snapshot.repeat === "off" || snapshot.repeat === "one" || snapshot.repeat === "all") {
+      setRepeatMode(snapshot.repeat);
+    }
+    if (typeof snapshot.shuffle === "boolean") setIsShuffle(snapshot.shuffle);
+
+    // Mark this so the normal session restore effect does not clobber the
+    // incoming handoff with a stale zero-state.
+    pendingViewSnapshotRef.current = snapshot;
+    restoreInProgressRef.current = true;
+    restoreAppliedRef.current = false;
+  }
+
+  // Async seek after loadedmetadata — driven by the normal playback restore
+  // machinery. The pending snapshot carries the target song + time.
+  // Returns a Promise that resolves when the restore is confirmed.
+  // IMPORTANT: checks transferId at every step to bail out if the transfer
+  // was cancelled while we were polling.
+  async function restorePendingSnapshotAfterMetadata() {
+    const snap = pendingViewSnapshotRef.current;
+    if (!snap) return;
+
+    // Capture the transferId so we can abort if the transfer became stale.
+    const snapTransferId = snap.transferId || "";
+    viewModeLog("restoring pending snapshot after metadata", { snap, snapTransferId });
+
+    // Guard: verify the transfer is still active before doing any work.
+    async function checkActiveTransfer() {
+      if (!snapTransferId) return true;
+      try {
+        const active = await readActiveViewTransfer();
+        if (!active || active.transferId !== snapTransferId) {
+          viewModeWarn("transfer no longer active, aborting restore", snapTransferId);
+          return false;
+        }
+        if (active.status !== "target-restoring") {
+          viewModeWarn("transfer status changed, aborting restore", active.status);
+          return false;
+        }
+      } catch (_) {
+        return false;
+      }
+      return true;
+    }
+
+    try {
+      // Step 1: Spin until the audio src matches the snapshot's song.
+      const songId = snap.songId || "";
+      const videoId = snap.videoId || "";
+      const maxWait = 8000;
+      const pollStart = Date.now();
+      let songMatched = false;
+      while (Date.now() - pollStart < maxWait) {
+        if (!(await checkActiveTransfer())) return;
+        const cur = currentSong;
+        if (cur && (cur.id === songId || cur.videoId === videoId)) {
+          songMatched = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (!songMatched) {
+        viewModeWarn("snapshot song match timeout");
+        return;
+      }
+
+      // Step 2: Wait for Blob URL to resolve.
+      if (!resolvedAudioUrl) {
+        if (!(await checkActiveTransfer())) return;
+        await new Promise((r) => setTimeout(r, 500));
+        if (!(await checkActiveTransfer())) return;
+      }
+
+      // Step 3: Now the audio element has the correct src. Wait loadedmetadata.
+      const audio = audioRef.current;
+      if (!audio) return;
+      if (!(await checkActiveTransfer())) return;
+      if (audio.readyState < 2) {
+        await new Promise((resolve) => {
+          const handler = () => {
+            audio.removeEventListener("loadedmetadata", handler);
+            audio.removeEventListener("error", handler);
+            resolve();
+          };
+          audio.addEventListener("loadedmetadata", handler);
+          audio.addEventListener("error", handler);
+          setTimeout(resolve, 8000); // fallback
+        });
+        if (!(await checkActiveTransfer())) return;
+      }
+
+      // Step 4: Validate duration and seek.
+      const liveDuration = Number(audio.duration);
+      const hasDuration = Number.isFinite(liveDuration) && liveDuration > 0;
+      const requestedTime = Math.max(0, Number(snap.currentTime || 0));
+      if (!hasDuration || !Number.isFinite(requestedTime)) {
+        viewModeWarn("snapshot restore: invalid duration or time", { liveDuration, requestedTime });
+        return;
+      }
+
+      const clampedTime = Math.min(requestedTime, Math.max(0, liveDuration - 0.5));
+      if (!(await checkActiveTransfer())) return;
+      try {
+        audio.currentTime = clampedTime;
+      } catch (err) {
+        viewModeWarn("snapshot seek failed", err);
+        return;
+      }
+      currentTimeRef.current = clampedTime;
+      setCurrentTime(clampedTime);
+      pendingViewSnapshotRef.current = null;
+      restoreInProgressRef.current = false;
+      restoreAppliedRef.current = true;
+      lastAppliedRestoreTimeRef.current = clampedTime;
+      viewModeLog("snapshot fully restored", {
+        clampedTime,
+        liveDuration,
+        isPlaying: snap.isPlaying,
+      });
+    } finally {
+      // Always clear the pending state so the UI doesn't stay stuck in
+      // "restoring" if we exited early or hit an error.
+      pendingViewSnapshotRef.current = null;
+      restoreInProgressRef.current = false;
+    }
+  }
+
+  // ── Transfer detection refs / shared handler ─────────────────────────────
+  // Cùng một transfer có thể xuất hiện qua cả mount-reconciliation và
+  // storage.session.onChanged (duplicate detection). Hai Set này gate
+  // trước khi gọi processIncomingViewTransfer.
+  const processingTransferIdsRef = useRef(new Set());
+  const completedTransferIdsRef = useRef(new Set());
+
+  // ── Hàm dùng chung: xử lý một transfer nhắm tới view hiện tại ───────
+  // Phục vụ cả 3 entry path:
+  //   (a) standalone popup mount bằng URL?transferId=… (target=standalone)
+  //   (b) sidepanel mount-reconciliation (target=sidepanel)
+  //   (c) sidepanel storage.session.onChanged (target=sidepanel)
+  // READY chỉ gửi SAU KHI ownership/snapshot restore hoàn tất.
+  async function processIncomingViewTransfer(transfer, trigger) {
+    const transferId = transfer?.transferId;
+    if (!transfer || typeof transferId !== "string" || !transferId) return;
+    if (processingTransferIdsRef.current.has(transferId)) return;
+    if (completedTransferIdsRef.current.has(transferId)) return;
+    const expectedTarget = surfaceMode; // 'sidepanel' | 'standalone'
+    if (transfer.targetMode !== expectedTarget) return;
+    if (
+      transfer.status !== "waiting-target" &&
+      transfer.status !== "target-restoring"
+    ) {
+      return;
+    }
+    // Pending snapshot phải cùng transferId (nếu tồn tại).
+    let pendingSnap = null;
+    try {
+      pendingSnap = await readSessionValue("svdmusic.pendingViewSnapshot");
+    } catch (_) { /* noop */ }
+    if (
+      pendingSnap &&
+      typeof pendingSnap === "object" &&
+      pendingSnap.transferId &&
+      pendingSnap.transferId !== transferId
+    ) {
+      return;
+    }
+    // Sidepanel target → window phải khớp với transfer.originWindowId.
+    if (surfaceMode === SIDEPANEL && typeof transfer.originWindowId === "number") {
+      try {
+        const w = await chrome.windows?.getCurrent?.();
+        const currentWId = w?.id ?? null;
+        if (currentWId != null && currentWId !== transfer.originWindowId) {
+          return;
+        }
+      } catch (_) { /* noop */ }
+    }
+    processingTransferIdsRef.current.add(transferId);
+    let currentWindowId = null;
+    if (surfaceMode === SIDEPANEL) {
+      try {
+        const w = await chrome.windows?.getCurrent?.();
+        currentWindowId = w?.id ?? null;
+      } catch (_) { /* noop */ }
+    }
+    let sentReady = false;
+    try {
+      try {
+        console.log("[SIDEPANEL] TRANSFER_DETECTED", {
+          trigger,
+          transferId,
+          status: transfer.status,
+          target: transfer.targetMode,
+          originWindowId: transfer.originWindowId ?? null,
+          currentWindowId,
+        });
+      } catch (_) { /* noop */ }
+
+      const updated = await updateActiveViewTransfer(transferId, {
+        status: "target-restoring",
+      });
+      if (!updated) return; // transfer đã bị overwrite hoặc stale
+
+      await acquireAudioOwnership();
+      try {
+        console.log("[SIDEPANEL] OWNERSHIP_ACQUIRED", { trigger, transferId });
+      } catch (_) { /* noop */ }
+
+      const snapshotToApply =
+        pendingSnap && pendingSnap.transferId === transferId
+          ? pendingSnap
+          : (transfer.snapshot || null);
+      if (snapshotToApply && isMeaningfulSnapshot(snapshotToApply)) {
+        applyPendingViewSnapshot(snapshotToApply);
+        try {
+          console.log("[SIDEPANEL] SNAPSHOT_APPLIED", {
+            trigger,
+            transferId,
+            songId: snapshotToApply.songId,
+            currentTime: snapshotToApply.currentTime,
+            isPlaying: !!snapshotToApply.isPlaying,
+          });
+        } catch (_) { /* noop */ }
+        await restorePendingSnapshotAfterMetadata();
+      }
+
+      const readyType =
+        surfaceMode === STANDALONE
+          ? "player/standalone-ready"
+          : "player/sidepanel-ready";
+      const readyPayload = {
+        transferId,
+        instanceId: instanceIdRef.current,
+      };
+      if (surfaceMode === STANDALONE) {
+        const winState = await chrome.storage.session.get(STANDALONE_WINDOW_ID_KEY);
+        readyPayload.standaloneWindowId =
+          winState?.[STANDALONE_WINDOW_ID_KEY] ?? null;
+      } else {
+        readyPayload.originWindowId = transfer.originWindowId ?? null;
+      }
+
+      try {
+        console.log("[SIDEPANEL] SENDING_READY", {
+          trigger,
+          transferId,
+          readyType,
+          payload: readyPayload,
+        });
+      } catch (_) { /* noop */ }
+
+      await chrome.runtime.sendMessage({ type: readyType, ...readyPayload });
+      sentReady = true;
+
+      try {
+        console.log("[SIDEPANEL] READY_SENT", {
+          trigger,
+          transferId,
+          readyType,
+        });
+      } catch (_) { /* noop */ }
+
+      await updateActiveViewTransfer(transferId, { status: "target-ready" });
+      completedTransferIdsRef.current.add(transferId);
+    } catch (err) {
+      try {
+        console.error("[SIDEPANEL] TRANSFER_ERROR", {
+          trigger,
+          transferId,
+          step: sentReady ? "post_ready" : "during_restore_or_send",
+          errorName: err?.name ?? null,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
+      } catch (_) { /* noop */ }
+    } finally {
+      processingTransferIdsRef.current.delete(transferId);
+    }
+  }
+
+  // ── View-transfer storage session listener (sidepanel-only path C) ────
+  // Chỉ sidepanel mới xử lý transfer qua kênh này.
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.storage?.session) return undefined;
+    if (surfaceMode !== SIDEPANEL) return undefined;
+    const handler = (changes, area) => {
+      if (area !== "session") return;
+      const t = changes?.[ACTIVE_VIEW_TRANSFER_KEY];
+      if (!t?.newValue) return;
+      const transfer = t.newValue;
+      if (!transfer || typeof transfer.transferId !== "string") return;
+      if (transfer.targetMode !== SIDEPANEL) return;
+      void processIncomingViewTransfer(transfer, "session-onchanged");
+    };
+    const ownerHandler = async (changes, area) => {
+      if (area !== "session") return;
+      const snapChange = changes["svdmusic.pendingViewSnapshot"];
+      if (
+        snapChange &&
+        snapChange.newValue &&
+        snapChange.newValue.targetMode === surfaceMode
+      ) {
+        applyPendingViewSnapshot(snapChange.newValue);
+      }
+      const ownerChange = changes[VIEW_OWNER_KEY];
+      if (ownerChange && ownerChange.newValue) {
+        const owner = ownerChange.newValue;
+        if (
+          owner.mode === surfaceMode &&
+          owner.instanceId === instanceIdRef.current
+        ) {
+          if (!ownsAudioRef.current) {
+            ownsAudioRef.current = true;
+            setOwnsAudio(true);
+          }
+        }
+      }
+    };
+    chrome.storage.session.onChanged.addListener(handler);
+    chrome.storage.session.onChanged.addListener(ownerHandler);
+    return () => {
+      try {
+        chrome.storage.session.onChanged.removeListener(handler);
+      } catch (_) { /* noop */ }
+      try {
+        chrome.storage.session.onChanged.removeListener(ownerHandler);
+      } catch (_) { /* noop */ }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Mount reconciliation ────────────────────────────────────────────────
+  // Sidepanel: không yêu cầu transferId trong URL. Đọc thẳng transfer
+  // hiện có từ storage để xử lý (path B). Standalone popup giữ URL path A.
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    if (surfaceMode === STANDALONE) {
+      const urlTransferId = getTransferIdFromUrl();
+      if (!urlTransferId) return undefined;
+      (async () => {
+        const transfer = await readActiveViewTransfer();
+        if (!transfer || transfer.transferId !== urlTransferId) return;
+        await processIncomingViewTransfer(transfer, "standalone-url-mount");
+      })();
+      return undefined;
+    }
+    (async () => {
+      const transfer = await readActiveViewTransfer();
+      if (!transfer) return;
+      if (transfer.targetMode !== SIDEPANEL) return;
+      if (
+        transfer.status !== "waiting-target" &&
+        transfer.status !== "target-restoring"
+      ) {
+        return;
+      }
+      await processIncomingViewTransfer(transfer, "sidepanel-mount");
+    })();
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── View-mode message bus ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    viewModeLog("view mounted", { surfaceMode });
+
+    const unsubscribe = subscribeViewMessages((msg) => {
+      if (!msg || !msg.type) return;
+      switch (msg.type) {
+        case "view-ready": {
+          break;
+        }
+        case "pending-snapshot": {
+          if (msg.payload?.transferId && msg.payload?.snapshot) {
+            writeSessionValue("svdmusic.pendingViewSnapshot", {
+              ...msg.payload.snapshot,
+              targetMode: msg.payload.targetMode,
+              transferId: msg.payload.transferId,
+            }).catch(() => {});
+          }
+          break;
+        }
+        case "transfer-ready": {
+          const { transferId: msgTransferId } = msg.payload || {};
+          if (!msgTransferId) break;
+          viewModeLog("received transfer-ready", msgTransferId);
+          (async () => {
+            if (viewTransferCleanupRef.current) {
+              clearTimeout(viewTransferCleanupRef.current);
+              viewTransferCleanupRef.current = null;
+            }
+            if (surfaceMode === "sidepanel") {
+              try {
+                const currentWindow = await chrome.windows?.getCurrent?.();
+                const winId = currentWindow?.id;
+                if (winId != null) {
+                  await chrome.runtime.sendMessage({
+                    type: "player/sidepanel-close",
+                    windowId: winId,
+                  });
+                }
+              } catch (err) {
+                viewModeWarn("sidepanel-close after transfer-ready failed", err);
+              }
+            } else {
+              try {
+                await chrome.runtime.sendMessage({ type: "player/close-standalone-tab" });
+              } catch (_) { /* noop */ }
+            }
+          })();
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    function onPageHide() {
+      postViewMessage("view-closing", { viewMode: surfaceMode });
+    }
+    window.addEventListener("pagehide", onPageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      unsubscribe();
+    };
+  }, []);
+
+  // ── View-mode button click handlers ───────────────────────────────────
+  //
+  // Both flows:
+  //   1. Persist the latest snapshot to localStorage so the OTHER view
+  //      can pick it up even if the BroadcastChannel handshake fails
+  //      (e.g. one side crashed).
+  //   2. Disable the button to prevent double-clicks.
+  //   3. Hand off via the SW so it can manage chrome.tabs / sidePanel.
+  //   4. On error, surface a toast and re-enable the button.
+  //
+  // We keep the user's click event live so we can pass `userGesture`
+  // directly into chrome.sidePanel.open. chrome.sidePanel.open
+  // requires a user gesture — bouncing through chrome.runtime will
+  // fail silently if the SW tries to open from a non-gesture context.
+  // ── Detach: sidepanel → standalone ─────────────────────────────────────────
+  // Flow: capture → persist → create transfer metadata → release ownership →
+  // post pending-snapshot to storage → create/focus standalone tab → wait
+  // STANDALONE_READY with matching transferId → close sidepanel.
+  // On error or 10s timeout: rollback ownership, restore state, keep sidepanel.
+  async function handleDetachToStandalone() {
+    if (isViewTransitioning) return;
+    setIsViewTransitioning(true);
+    isTransferringRef.current = true;
+
+    // 1. Capture snapshot while audio is still ours.
+    let snap;
+    try {
+      snap = capturePlaybackSnapshot();
+    } catch (err) {
+      viewModeWarn("capture snapshot failed", err);
+    }
+
+    // 2. Persist to localStorage as a fallback (BroadcastChannel may fail).
+    try {
+      persistPlaybackSession("view-detach", { force: true });
+    } catch (err) {
+      viewModeWarn("persist on detach failed", err);
+    }
+
+    // 3. Create structured transfer metadata.
+    const transferId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(Math.random()) + "-" + String(Date.now());
+    const originWindowId = await chrome.windows?.getCurrent?.().then(w => w?.id).catch(() => null);
+    const transfer = createViewTransfer({
+      transferId,
+      sourceMode: surfaceMode,
+      targetMode: "standalone",
+      sourceInstanceId: instanceIdRef.current,
+      originWindowId,
+    });
+    await writeActiveViewTransfer(transfer);
+
+    // 4. Pause and release ownership.
+    releaseAudioOwnershipLocal();
+    await releaseAudioOwnership();
+
+    // 5. Store pending snapshot in session so the target can read it.
+    // Only write the snapshot if we are creating a NEW standalone tab.
+    // If an existing tab is already open, it may already have its own
+    // snapshot and we don't want to overwrite it with our stale one.
+    const url = getStandaloneUrl(transferId);
+    if (!url) {
+      setViewModeToast("Không thể mở trình phát trong tab riêng.");
+      setIsViewTransitioning(false);
+      isTransferringRef.current = false;
+      await clearActiveViewTransfer(transferId);
+      await acquireAudioOwnership();
+      if (snap?.isPlaying) {
+        try {
+          audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
+        } catch (_) { /* noop */ }
+      }
+      return;
+    }
+
+    // 6. Update transfer to waiting-target.  MUST happen before any
+    // tab operation so the target can read the transfer metadata.
+    await updateActiveViewTransfer(transferId, { status: "waiting-target" });
+
+    // 7. Set up readyPromise BEFORE we create or focus any tab.
+    // This ensures the listener is active the moment the target mounts,
+    // even on a fast CPU. The promise races a 10-second timeout against
+    // the SW/BroadcastChannel READY signal.
+    let resolveReady;
+    const readyPromise = new Promise((resolve) => { resolveReady = resolve; });
+    const timerId = setTimeout(async () => {
+      viewModeWarn("detach timeout: no READY");
+      viewTransferCleanupRef.current = null;
+      isTransferringRef.current = false;
+      await clearActiveViewTransfer(transferId);
+      await acquireAudioOwnership();
+      setIsViewTransitioning(false);
+      if (snap?.isPlaying) {
+        try {
+          audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
+        } catch (_) { /* noop */ }
+      }
+      resolveReady({ timedOut: true });
+    }, VIEW_TRANSFER_TIMEOUT_MS);
+    viewTransferCleanupRef.current = timerId;
+
+    const clearReadyListeners = () => {
+      clearTimeout(timerId);
+      viewTransferCleanupRef.current = null;
+      if (unsubBc) { unsubBc(); unsubBc = null; }
+      if (removeListener) { removeListener(); removeListener = null; }
+    };
+
+    // BroadcastChannel listener.
+    let unsubBc = null;
+    unsubBc = subscribeViewMessages((msg) => {
+      if (msg.type === "transfer-ready" && msg.payload?.transferId === transferId) {
+        clearReadyListeners();
+        resolveReady({ timedOut: false });
+      }
+    });
+
+    // SW runtime message listener.
+    let removeListener = null;
+    removeListener = (message) => {
+      if (message?.type === "player/standalone-ready" && message?.transferId === transferId) {
+        clearReadyListeners();
+        resolveReady({ timedOut: false });
+      }
+    };
+    chrome.runtime.onMessage.addListener(removeListener);
+
+    // 8. Duplicate-popup guard: focus existing popup if one exists.
+    let existingWindowId = null;
+    try {
+      const sw = await chrome.storage.session.get("svdmusic.standaloneWindowId");
+      const storedId = sw?.["svdmusic.standaloneWindowId"];
+      if (typeof storedId === "number") {
+        await chrome.windows.get(storedId);
+        existingWindowId = storedId; // window still exists
+      }
+    } catch (_) {
+      existingWindowId = null; // window gone, clear path for new popup
+    }
+
+    if (existingWindowId != null) {
+      viewModeLog("existing popup found, focusing");
+      await chrome.windows.update(existingWindowId, { focused: true }).catch(() => {});
+      await updateActiveViewTransfer(transferId, {
+        status: "waiting-target",
+        standaloneWindowId: existingWindowId,
+      });
+      if (snap) {
+        await writeSessionValue("svdmusic.pendingViewSnapshot", {
+          ...snap,
+          targetMode: "standalone",
+          transferId,
+        }).catch(() => {});
+        postViewMessage("pending-snapshot", {
+          transferId,
+          snapshot: snap,
+          targetMode: "standalone",
+        });
+      }
+      const result = await readyPromise;
+      if (result.timedOut) return;
+      if (originWindowId != null) {
+        try {
+          await chrome.runtime.sendMessage({
+            type: "player/sidepanel-close",
+            windowId: originWindowId,
+          });
+        } catch (err) {
+          viewModeWarn("sidepanel-close after detach READY failed", err);
+        }
+      }
+      return;
+    }
+
+    // 9. No existing popup — write pending snapshot and create new popup via SW.
+    if (snap) {
+      await writeSessionValue("svdmusic.pendingViewSnapshot", {
+        ...snap,
+        targetMode: "standalone",
+        transferId,
+      }).catch(() => {});
+      postViewMessage("pending-snapshot", {
+        transferId,
+        snapshot: snap,
+        targetMode: "standalone",
+      });
+    }
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "player/standalone-opened",
+        url,
+        originWindowId,
+      });
+      if (!response || response.ok !== true) {
+        throw new Error(response?.error || "Tạo cửa sổ thất bại.");
+      }
+      if (response.standaloneWindowId) {
+        await updateActiveViewTransfer(transferId, { standaloneWindowId: response.standaloneWindowId });
+      }
+      if (response.standaloneTabId) {
+        await updateActiveViewTransfer(transferId, { standaloneTabId: response.standaloneTabId });
+      }
+    } catch (err) {
+      viewModeWarn("detach: create tab failed", err);
+      setViewModeToast("Không thể mở trình phát trong tab riêng.");
+      clearReadyListeners();
+      isTransferringRef.current = false;
+      await clearActiveViewTransfer(transferId);
+      await acquireAudioOwnership();
+      setIsViewTransitioning(false);
+      if (snap?.isPlaying) {
+        try {
+          audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
+        } catch (_) { /* noop */ }
+      }
+      return;
+    }
+
+    // 10. Await READY (or timeout).
+    const result = await readyPromise;
+    if (result.timedOut) return;
+
+    // 11. Close sidepanel via SW.
+    if (originWindowId != null) {
+      try {
+        await chrome.runtime.sendMessage({
+          type: "player/sidepanel-close",
+          windowId: originWindowId,
+        });
+      } catch (err) {
+        viewModeWarn("sidepanel-close after detach READY failed", err);
+      }
+    }
+    // Side panel will unmount — don't reset isViewTransitioning.
+  }
+
+  // ── Pin back: standalone → sidepanel ───────────────────────────────────────
+  // Flow: capture → persist → create transfer → release ownership → open
+  // sidepanel directly in user gesture → wait SIDEPANEL_READY with transferId →
+  // close standalone tab.
+  // On error or 10s timeout: rollback ownership, restore state, keep standalone.
+  async function handlePinBackToSidePanel(event) {
+    try {
+      console.log("[PIN_BACK] ENTER", {
+        isStandalone,
+        surfaceMode,
+        isViewTransitioning,
+        isTransferring: isTransferringRef.current,
+      });
+    } catch (_) { /* noop */ }
+    if (isViewTransitioning) {
+      try {
+        console.warn("[PIN_BACK] EARLY_RETURN", {
+          reason: "isViewTransitioning",
+          isViewTransitioning,
+          isTransferring: isTransferringRef.current,
+          surfaceMode,
+        });
+      } catch (_) { /* noop */ }
+      return;
+    }
+    setIsViewTransitioning(true);
+    isTransferringRef.current = true;
+
+    // 1. Capture popupWindowId FIRST.
+    // chrome.windows.getCurrent() inside a popup returns the popup's own ID.
+    // Capturing it here means we never depend on session state that may
+    // have been cleared (e.g. by a previous chrome.windows.onRemoved run)
+    // or overwritten by another path.
+    let popupWindowId = null;
+    try {
+      const currentWindow = await chrome.windows.getCurrent();
+      popupWindowId = currentWindow?.id ?? null;
+    } catch (_) {
+      popupWindowId = null;
+    }
+    try {
+      console.log("[PIN_BACK] POPUP_ID_CAPTURED", { popupWindowId });
+    } catch (_) { /* noop */ }
+    if (popupWindowId == null) {
+      try {
+        console.warn("[PIN_BACK] EARLY_RETURN", {
+          reason: "no_popup_window_id",
+          popupWindowId,
+          transferId: null,
+        });
+      } catch (_) { /* noop */ }
+      setIsViewTransitioning(false);
+      isTransferringRef.current = false;
+      return;
+    }
+
+    // 2. Capture snapshot while audio is still ours.
+    let snap;
+    try {
+      snap = capturePlaybackSnapshot();
+    } catch (err) {
+      viewModeWarn("capture snapshot failed", err);
+    }
+
+    // 3. Persist to localStorage.
+    try {
+      persistPlaybackSession("view-pin", { force: true });
+    } catch (err) {
+      viewModeWarn("persist on pin failed", err);
+    }
+
+    // 4. Create structured transfer metadata.
+    const transferId = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : String(Math.random()) + "-" + String(Date.now());
+    const transfer = createViewTransfer({
+      transferId,
+      sourceMode: surfaceMode,
+      targetMode: "sidepanel",
+      sourceInstanceId: instanceIdRef.current,
+      standaloneWindowId: popupWindowId,
+    });
+    await writeActiveViewTransfer(transfer);
+
+    // 5. Resolve target windowId from session.
+    let targetWindowId = null;
+    try {
+      const session = await chrome.storage?.session?.get?.([
+        ORIGIN_WINDOW_ID_KEY,
+      ]);
+      if (session?.[ORIGIN_WINDOW_ID_KEY] != null) {
+        targetWindowId = session[ORIGIN_WINDOW_ID_KEY];
+      }
+    } catch (_) { /* noop */ }
+    if (targetWindowId == null && event?.view?.windowId != null) {
+      targetWindowId = event.view.windowId;
+    }
+
+    // 6. Update transfer to waiting-target BEFORE releasing ownership or
+    // opening the sidepanel so the target can read it immediately on mount.
+    await updateActiveViewTransfer(transferId, {
+      status: "waiting-target",
+      standaloneWindowId: popupWindowId,
+    });
+
+    if (targetWindowId == null) {
+      try {
+        console.warn("[PIN_BACK] EARLY_RETURN", {
+          reason: "no_target_window",
+          transferId,
+          popupWindowId,
+          originWindowId: null,
+          originWindowIdFromSession: session?.[ORIGIN_WINDOW_ID_KEY],
+          eventViewWindowId: event?.view?.windowId,
+        });
+      } catch (_) { /* noop */ }
+      setViewModeToast("Không thể ghim lại Side Panel. Tab hiện tại vẫn được giữ.");
+      setIsViewTransitioning(false);
+      isTransferringRef.current = false;
+      await clearActiveViewTransfer(transferId);
+      await acquireAudioOwnership();
+      if (snap?.isPlaying) {
+        try {
+          audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
+        } catch (_) { /* noop */ }
+      }
+      return;
+    }
+
+    viewModeLog?.("[PIN_BACK] START", {
+      transferId,
+      popupWindowId,
+      originWindowId: targetWindowId,
+    });
+    // Always-visible console log so manual debugging in DevTools confirms
+    // capture without depending on the [SVDMusic][ViewMode] gate.
+    try {
+      console.log("[PIN_BACK] START", {
+        transferId,
+        popupWindowId,
+        originWindowId: targetWindowId,
+      });
+    } catch (_) { /* noop */ }
+
+    // 7. Pause and release ownership AFTER writing the snapshot. The snapshot
+    // and the pendingViewSnapshot session entry must be in place before we
+    // stop owning the audio so the sidepanel target can read them safely.
+    releaseAudioOwnershipLocal();
+    await releaseAudioOwnership();
+
+    if (snap) {
+      await writeSessionValue("svdmusic.pendingViewSnapshot", {
+        ...snap,
+        targetMode: "sidepanel",
+        transferId,
+      }).catch(() => {});
+      postViewMessage("pending-snapshot", {
+        transferId,
+        snapshot: snap,
+        targetMode: "sidepanel",
+      });
+    }
+    await updateActiveViewTransfer(transferId, {
+      status: "waiting-target",
+      standaloneWindowId: popupWindowId,
+    });
+
+    // 8. Set up readyPromise BEFORE we open the sidepanel.
+    let resolveReady;
+    const readyPromise = new Promise((resolve) => { resolveReady = resolve; });
+    const timerId = setTimeout(async () => {
+      viewModeWarn("pin timeout: no SIDEPANEL_READY");
+      viewTransferCleanupRef.current = null;
+      isTransferringRef.current = false;
+      await clearActiveViewTransfer(transferId);
+      await acquireAudioOwnership();
+      setIsViewTransitioning(false);
+      if (snap?.isPlaying) {
+        try {
+          audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
+        } catch (_) { /* noop */ }
+      }
+      try {
+        console.log("[PIN_BACK] TIMEOUT", { transferId, popupWindowId });
+      } catch (_) { /* noop */ }
+      resolveReady({ timedOut: true });
+    }, VIEW_TRANSFER_TIMEOUT_MS);
+    viewTransferCleanupRef.current = timerId;
+
+    const clearReadyListeners = () => {
+      clearTimeout(timerId);
+      viewTransferCleanupRef.current = null;
+      if (unsubBc) { unsubBc(); unsubBc = null; }
+      if (removeListener) { removeListener(); removeListener = null; }
+    };
+
+    let unsubBc = null;
+    unsubBc = subscribeViewMessages((msg) => {
+      if (msg.type === "transfer-ready" && msg.payload?.transferId === transferId) {
+        clearReadyListeners();
+        resolveReady({ timedOut: false });
+      }
+    });
+
+    let removeListener = null;
+    removeListener = (message) => {
+      try {
+        console.log("[PIN_BACK] READY_MESSAGE_RECEIVED", {
+          type: message?.type,
+          messageTransferId: message?.transferId,
+          expectedTransferId: transferId,
+          match: message?.transferId === transferId,
+          originWindowId: message?.originWindowId,
+          instanceId: message?.instanceId,
+        });
+      } catch (_) { /* noop */ }
+      // Only SIDEPANEL_READY counts here. Standalone uses its own READY name.
+      if (message?.type !== "player/sidepanel-ready") return;
+      if (message?.transferId !== transferId) return;
+      clearReadyListeners();
+      resolveReady({ timedOut: false });
+    };
+    chrome.runtime.onMessage.addListener(removeListener);
+
+    // 9. Open sidepanel synchronously within the user gesture.
+    let opened = false;
+    try {
+      if (chrome.sidePanel?.open) {
+        await chrome.sidePanel.open({ windowId: targetWindowId });
+        opened = true;
+      }
+    } catch (err) {
+      viewModeWarn("direct sidePanel.open failed", err);
+    }
+    if (opened) {
+      try {
+        console.log("[PIN_BACK] SIDEPANEL_OPENED", {
+          transferId,
+          popupWindowId,
+          originWindowId: targetWindowId,
+        });
+      } catch (_) { /* noop */ }
+    }
+    if (!opened) {
+      try {
+        console.log("[PIN_BACK] SIDEPANEL_OPEN_FALLBACK", {
+          transferId,
+          popupWindowId,
+          originWindowId: targetWindowId,
+        });
+      } catch (_) { /* noop */ }
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "player/sidepanel-open",
+          windowId: targetWindowId,
+        });
+        try {
+          console.log("[PIN_BACK] SIDEPANEL_OPEN_RESPONSE", {
+            transferId,
+            ok: response?.ok === true,
+            response,
+          });
+        } catch (_) { /* noop */ }
+        if (!response || response.ok !== true) {
+          throw new Error(response?.error || "sidePanel.open thất bại.");
+        }
+        opened = true;
+      } catch (err) {
+        try {
+          console.warn("[PIN_BACK] EARLY_RETURN", {
+            reason: "sidepanel_open_failed",
+            transferId,
+            popupWindowId,
+            originWindowId: targetWindowId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } catch (_) { /* noop */ }
+        viewModeWarn("pin: SW sidePanel.open failed", err);
+        setViewModeToast("Không thể ghim lại Side Panel. Tab hiện tại vẫn được giữ.");
+        clearReadyListeners();
+        isTransferringRef.current = false;
+        await clearActiveViewTransfer(transferId);
+        await acquireAudioOwnership();
+        setIsViewTransitioning(false);
+        if (snap?.isPlaying) {
+          try {
+            audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
+          } catch (_) { /* noop */ }
+        }
+        return;
+      }
+    }
+
+    // 10. Await SIDEPANEL_READY (or timeout).
+    try {
+      console.log("[PIN_BACK] WAITING_READY", { transferId, popupWindowId });
+    } catch (_) { /* noop */ }
+    const result = await readyPromise;
+    try {
+      console.log("[PIN_BACK] SIDEPANEL_READY", {
+        transferId,
+        popupWindowId,
+        timedOut: !!result.timedOut,
+      });
+    } catch (_) { /* noop */ }
+    if (result.timedOut) {
+      try {
+        console.warn("[PIN_BACK] TIMEOUT", {
+          transferId,
+          popupWindowId,
+          originWindowId: targetWindowId,
+        });
+      } catch (_) { /* noop */ }
+      return;
+    }
+
+    // 11. Close the popup that is currently hosting this React tree. We use
+    // popupWindowId captured at step 1 so we never depend on session state
+    // (which may have been cleared if a previous removal fired). The SW
+    // handler validates independently before calling chrome.windows.remove.
+    if (popupWindowId == null) {
+      try {
+        console.warn("[PIN_BACK] EARLY_RETURN", {
+          reason: "no_popup_window_id_after_ready",
+          transferId,
+          popupWindowId,
+          originWindowId: targetWindowId,
+        });
+      } catch (_) { /* noop */ }
+      viewModeWarn("pin: no popupWindowId captured, cannot close popup");
+      return;
+    }
+    if (popupWindowId === targetWindowId) {
+      try {
+        console.warn("[PIN_BACK] EARLY_RETURN", {
+          reason: "popup_equals_origin",
+          transferId,
+          popupWindowId,
+          originWindowId: targetWindowId,
+        });
+      } catch (_) { /* noop */ }
+      viewModeWarn("pin: popupWindowId equals originWindowId, refusing to close");
+      return;
+    }
+
+    let closeResult;
+    try {
+      console.log("[PIN_BACK] BEFORE_CLOSE_MESSAGE", {
+        transferId,
+        popupWindowId,
+        originWindowId: targetWindowId,
+      });
+    } catch (_) { /* noop */ }
+    try {
+      closeResult = await chrome.runtime.sendMessage({
+        type: "player/close-standalone-popup",
+        standaloneWindowId: popupWindowId,
+        transferId,
+      });
+    } catch (err) {
+      try {
+        console.error("[PIN_BACK] CLOSE_MESSAGE_ERROR", {
+          step: "sendMessage_close_standalone_popup",
+          transferId,
+          popupWindowId,
+          originWindowId: targetWindowId,
+          errorName: err?.name ?? null,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          errorStack: err instanceof Error ? err.stack : null,
+        });
+      } catch (_) { /* noop */ }
+      viewModeWarn("pin: sendMessage to close popup failed", err);
+      closeResult = null;
+    }
+    if (closeResult == null || typeof closeResult !== "object") {
+      try {
+        console.warn("[PIN_BACK] CLOSE_NO_RESULT", {
+          transferId,
+          popupWindowId,
+          closeResult,
+        });
+      } catch (_) { /* noop */ }
+    }
+    try {
+      console.log("[PIN_BACK] CLOSE_RESULT", {
+        transferId,
+        popupWindowId,
+        removedWindowId: closeResult?.removedWindowId ?? null,
+        ok: closeResult?.ok === true,
+        error: closeResult?.error ?? null,
+      });
+    } catch (_) { /* noop */ }
+
+    // Popup close is best-effort after READY. If it failed we leave it open
+    // — the user can close it manually. We do NOT undo the sidepanel restore
+    // because that would re-introduce double-play risk.
+    // Standalone will unmount shortly either way; don't reset isViewTransitioning
+    // since this view is about to close.
+  }
+
+  function handleViewModeClick(event) {
+    try {
+      console.log("[PIN_BACK_BUTTON] CLICK", {
+        isStandalone,
+        surfaceMode,
+        disabled: isViewTransitioning,
+        type: event?.type,
+      });
+    } catch (_) { /* noop */ }
+    if (isViewTransitioning) return;
+    if (isStandalone) {
+      handlePinBackToSidePanel(event);
+    } else {
+      handleDetachToStandalone();
+    }
+  }
 
   // ── Shared persist helper ─────────────────────────────────────────────
   //
@@ -2249,6 +3537,11 @@ function App() {
         </div>
 
         <div className="topBarActions">
+          <ViewModeButton
+            mode={surfaceMode}
+            onClick={handleViewModeClick}
+            disabled={isViewTransitioning}
+          />
           <AddSongButton onClick={() => setIsAddSongOpen(true)} />
           <SettingsButton onClick={() => setIsSettingsOpen(true)} />
           <button
@@ -2710,6 +4003,8 @@ function App() {
         onClose={handleCloseContextMenu}
         onDeleted={handleSongDeleted}
       />
+
+      <ViewModeToast message={viewModeToast} />
     </div>
   );
 }

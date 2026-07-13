@@ -5978,3 +5978,143 @@ body {
   .lyricsStage { max-width: 1520px; }
   .discWrap { width: 440px; height: 440px; }
 }
+
+/* =====================================================================
+   Sidepanel ? standalone view-mode CSS
+   ---------------------------------------------------------------------
+   The App.jsx root <div> always carries a `svdmusic-view-sidepanel` or
+   `svdmusic-view-standalone` class. The sidepanel cap stays exactly
+   what it was in v1.1.5 (only `.pageGrid.view-list` is centered at
+   1480px). The standalone surface unwraps every cap so a wide Chrome
+   tab can use the full viewport width and the existing fluid type
+   layer keeps everything readable down to phone sizes.
+
+   The view-mode button reuses the existing `.topBadgeButton` class so
+   it inherits all the responsive breakpoints (320 / 360 / 480 / 640 /
+   768 / 1024 / 1280 / 1600 / 2200 px) automatically.
+   ===================================================================== */
+
+/* ----- Standalone surface � let the layout breathe -------------------- */
+.svdmusic-view-standalone .pageGrid.view-list {
+  /* v1.1.5 kept the centered cap on .pageGrid.view-list so the song
+     list view stays readable on a 4K monitor. Standalone tabs are
+     usually opened from a single window so the user already has a
+     focused working area; drop the cap so lyrics/disc can use the
+     full tab width. */
+  max-width: none;
+}
+.svdmusic-view-standalone .lyricsStage {
+  /* The lyricsStage still caps at 1320/1520 from the existing
+     ultra-wide rule � that keeps the disc+lyrics balanced on a 4K
+     display. We only relax it for mid-sized standalone windows where
+     the existing cap leaves dead space on either side. */
+}
+@media (min-width: 1280px) {
+  .svdmusic-view-standalone .lyricsStage {
+    max-width: min(1320px, calc(100vw - 48px));
+  }
+}
+@media (min-width: 1920px) {
+  .svdmusic-view-standalone .lyricsStage {
+    max-width: 1480px;
+  }
+}
+
+/* ----- View-mode button ---------------------------------------------- */
+.topBarActions .viewModeButton {
+  /* Same footprint as the AddSongButton / SettingsButton so the row
+     stays balanced. The "isStandalone" modifier only swaps the
+     tooltip / aria-label inside the component. */
+}
+.topBarActions .viewModeButton:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+/* ----- View-mode toast ----------------------------------------------- */
+.viewModeToast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(7, 11, 22, 0.92);
+  border: 1px solid rgba(0, 255, 179, 0.35);
+  color: var(--text-main, #ececec);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  animation: svdmusic-toast-in 180ms ease-out;
+}
+.theme-light .viewModeToast {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 168, 120, 0.45);
+  color: #111;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+@keyframes svdmusic-toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* =====================================================================
+   Popup window CSS
+   ---------------------------------------------------------------------
+   When the standalone surface runs in a chrome.windows.create popup
+   (type: 'popup'), the root carries the extra class
+   `svdmusic-surface-popup`. These rules override the defaults so the
+   popup fills its window, never shows a body scrollbar, and the
+   playerBar sits flush at the bottom.
+   ===================================================================== */
+
+/* 1. Prevent any body-level overflow that could produce double scrollbars. */
+.svdmusic-surface-popup html,
+.svdmusic-surface-popup body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 2. Root fills the popup window without a 100dvh quirk on mobile browsers. */
+.svdmusic-surface-popup #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* 3. appShell is the flex column that already handles topBar / pageGrid /
+   playerBar. In a popup it must fill 100% of the root rather than 100dvh. */
+.svdmusic-surface-popup .appShell {
+  width: 100%;
+  height: 100%;
+  min-height: 0; /* override the 100vh min-height from the base rule */
+  overflow: hidden;
+}
+
+/* 4. The standalone surface already removes max-width caps on .pageGrid and
+   .lyricsStage; re-affirm it for the popup so the OS title bar doesn't
+   eat into usable content width. */
+.svdmusic-surface-popup .appShell.svdmusic-view-standalone {
+  max-width: none;
+}
+
+/* 5. pageGrid fills the remaining space without triggering body scroll. */
+.svdmusic-surface-popup .pageGrid {
+  overflow: hidden;
+  /* Existing .pageGrid uses position: absolute; top/bottom from v1.0.7.
+     That already stretches it to fill the middle. Ensure overflow:hidden. */
+}
+
+/* 6. Any internal panels that need to scroll (e.g. song list in list view)
+   use their own overflow:auto — never the body. */
+.svdmusic-surface-popup .songList {
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+}
