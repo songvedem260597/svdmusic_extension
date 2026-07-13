@@ -17,7 +17,7 @@ import {
   Waves,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { findActiveLyricIndex, parseLrc } from "./utils/lyrics.js";
 import { formatTime } from "./utils/time.js";
@@ -370,6 +370,14 @@ function App() {
   const isStandalone = surfaceMode === "standalone";
   // True when the standalone surface is a popup window (not a regular tab).
   const isPopupSurface = detectPopupSurface();
+  try {
+    console.log("[VIEW_BOOT]", {
+      href: typeof window !== "undefined" ? window.location.href : null,
+      surfaceMode,
+      isStandalone,
+      search: typeof window !== "undefined" ? window.location.search : null,
+    });
+  } catch (_) { /* noop */ }
   // True while a detach/pin click is mid-flight. Disables the
   // view-mode button so the user can't double-click.
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
@@ -2196,23 +2204,70 @@ function App() {
   const processingTransferIdsRef = useRef(new Set());
   const completedTransferIdsRef = useRef(new Set());
 
+  // Stable refs for the helper functions so processIncomingViewTransfer
+  // can stay a useCallback with [] deps and the storage-listener effect
+  // does not tear down + re-register on every render.
+  const acquireAudioOwnershipRef = useRef(null);
+  const applyPendingViewSnapshotRef = useRef(null);
+  const restorePendingSnapshotAfterMetadataRef = useRef(null);
+  acquireAudioOwnershipRef.current = acquireAudioOwnership;
+  applyPendingViewSnapshotRef.current = applyPendingViewSnapshot;
+  restorePendingSnapshotAfterMetadataRef.current = restorePendingSnapshotAfterMetadata;
+
   // ── Hàm dùng chung: xử lý một transfer nhắm tới view hiện tại ───────
   // Phục vụ cả 3 entry path:
   //   (a) standalone popup mount bằng URL?transferId=… (target=standalone)
   //   (b) sidepanel mount-reconciliation (target=sidepanel)
   //   (c) sidepanel storage.session.onChanged (target=sidepanel)
   // READY chỉ gửi SAU KHI ownership/snapshot restore hoàn tất.
-  async function processIncomingViewTransfer(transfer, trigger) {
+  const processIncomingViewTransfer = useCallback(async function processIncomingViewTransfer(transfer, trigger) {
     const transferId = transfer?.transferId;
-    if (!transfer || typeof transferId !== "string" || !transferId) return;
-    if (processingTransferIdsRef.current.has(transferId)) return;
-    if (completedTransferIdsRef.current.has(transferId)) return;
-    const expectedTarget = surfaceMode; // 'sidepanel' | 'standalone'
-    if (transfer.targetMode !== expectedTarget) return;
+    try {
+      console.log("[TRANSFER] ENTER", {
+        trigger,
+        currentSurfaceMode: surfaceMode,
+        transfer,
+      });
+    } catch (_) { /* noop */ }
+    if (!transfer || typeof transferId !== "string" || !transferId) {
+      try { console.warn("[TRANSFER] REJECT", { reason: "missing_transfer", trigger, surfaceMode }); } catch (_) {}
+      return;
+    }
+    if (processingTransferIdsRef.current.has(transferId)) {
+      try { console.warn("[TRANSFER] REJECT", { reason: "processing", trigger, transferId, surfaceMode }); } catch (_) {}
+      return;
+    }
+    if (completedTransferIdsRef.current.has(transferId)) {
+      try { console.warn("[TRANSFER] REJECT", { reason: "completed", trigger, transferId, surfaceMode }); } catch (_) {}
+      return;
+    }
+    const expectedTarget = surfaceMode;
+    if (transfer.targetMode !== expectedTarget) {
+      try {
+        console.warn("[TRANSFER] REJECT", {
+          reason: "wrong_target",
+          trigger,
+          transferId,
+          surfaceMode,
+          expectedTarget,
+          transferTargetMode: transfer.targetMode,
+        });
+      } catch (_) {}
+      return;
+    }
     if (
       transfer.status !== "waiting-target" &&
       transfer.status !== "target-restoring"
     ) {
+      try {
+        console.warn("[TRANSFER] REJECT", {
+          reason: "bad_status",
+          trigger,
+          transferId,
+          surfaceMode,
+          status: transfer.status,
+        });
+      } catch (_) {}
       return;
     }
     // Pending snapshot phải cùng transferId (nếu tồn tại).
@@ -2226,6 +2281,15 @@ function App() {
       pendingSnap.transferId &&
       pendingSnap.transferId !== transferId
     ) {
+      try {
+        console.warn("[TRANSFER] REJECT", {
+          reason: "snapshot_mismatch",
+          trigger,
+          transferId,
+          surfaceMode,
+          pendingTransferId: pendingSnap.transferId,
+        });
+      } catch (_) {}
       return;
     }
     // Sidepanel target → window phải khớp với transfer.originWindowId.
@@ -2234,6 +2298,16 @@ function App() {
         const w = await chrome.windows?.getCurrent?.();
         const currentWId = w?.id ?? null;
         if (currentWId != null && currentWId !== transfer.originWindowId) {
+          try {
+            console.warn("[TRANSFER] REJECT", {
+              reason: "wrong_window",
+              trigger,
+              transferId,
+              surfaceMode,
+              currentWindowId: currentWId,
+              originWindowId: transfer.originWindowId,
+            });
+          } catch (_) {}
           return;
         }
       } catch (_) { /* noop */ }
@@ -2264,7 +2338,7 @@ function App() {
       });
       if (!updated) return; // transfer đã bị overwrite hoặc stale
 
-      await acquireAudioOwnership();
+      await acquireAudioOwnershipRef.current?.();
       try {
         console.log("[SIDEPANEL] OWNERSHIP_ACQUIRED", { trigger, transferId });
       } catch (_) { /* noop */ }
@@ -2274,7 +2348,7 @@ function App() {
           ? pendingSnap
           : (transfer.snapshot || null);
       if (snapshotToApply && isMeaningfulSnapshot(snapshotToApply)) {
-        applyPendingViewSnapshot(snapshotToApply);
+        applyPendingViewSnapshotRef.current?.(snapshotToApply);
         try {
           console.log("[SIDEPANEL] SNAPSHOT_APPLIED", {
             trigger,
@@ -2284,7 +2358,7 @@ function App() {
             isPlaying: !!snapshotToApply.isPlaying,
           });
         } catch (_) { /* noop */ }
-        await restorePendingSnapshotAfterMetadata();
+        await restorePendingSnapshotAfterMetadataRef.current?.();
       }
 
       const readyType =
@@ -2338,16 +2412,29 @@ function App() {
     } finally {
       processingTransferIdsRef.current.delete(transferId);
     }
-  }
+  }, [surfaceMode]);
 
   // ── View-transfer storage session listener (sidepanel-only path C) ────
   // Chỉ sidepanel mới xử lý transfer qua kênh này.
   useEffect(() => {
+    try {
+      console.log("[SIDEPANEL] STORAGE_LISTENER_EFFECT", {
+        surfaceMode,
+        willRegister: surfaceMode === SIDEPANEL,
+      });
+    } catch (_) { /* noop */ }
     if (typeof chrome === "undefined" || !chrome.storage?.session) return undefined;
     if (surfaceMode !== SIDEPANEL) return undefined;
     const handler = (changes, area) => {
       if (area !== "session") return;
       const t = changes?.[ACTIVE_VIEW_TRANSFER_KEY];
+      try {
+        console.log("[SIDEPANEL] STORAGE_CHANGED", {
+          keyPresent: Boolean(changes[ACTIVE_VIEW_TRANSFER_KEY]),
+          oldValue: changes[ACTIVE_VIEW_TRANSFER_KEY]?.oldValue,
+          newValue: changes[ACTIVE_VIEW_TRANSFER_KEY]?.newValue,
+        });
+      } catch (_) { /* noop */ }
       if (!t?.newValue) return;
       const transfer = t.newValue;
       if (!transfer || typeof transfer.transferId !== "string") return;
@@ -2389,12 +2476,18 @@ function App() {
       } catch (_) { /* noop */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [surfaceMode, processIncomingViewTransfer]);
 
   // ── Mount reconciliation ────────────────────────────────────────────────
   // Sidepanel: không yêu cầu transferId trong URL. Đọc thẳng transfer
   // hiện có từ storage để xử lý (path B). Standalone popup giữ URL path A.
   useEffect(() => {
+    try {
+      console.log("[SIDEPANEL] MOUNT_RECONCILE_ENTER", {
+        surfaceMode,
+        expected: SIDEPANEL,
+      });
+    } catch (_) { /* noop */ }
     if (typeof window === "undefined") return undefined;
     if (surfaceMode === STANDALONE) {
       const urlTransferId = getTransferIdFromUrl();
@@ -2408,19 +2501,45 @@ function App() {
     }
     (async () => {
       const transfer = await readActiveViewTransfer();
-      if (!transfer) return;
-      if (transfer.targetMode !== SIDEPANEL) return;
+      try {
+        console.log("[SIDEPANEL] MOUNT_TRANSFER_READ", {
+          transfer,
+          surfaceMode,
+        });
+      } catch (_) { /* noop */ }
+      if (!transfer) {
+        try { console.warn("[SIDEPANEL] MOUNT_REJECT", { reason: "no_transfer", surfaceMode }); } catch (_) {}
+        return;
+      }
+      if (transfer.targetMode !== SIDEPANEL) {
+        try {
+          console.warn("[SIDEPANEL] MOUNT_REJECT", {
+            reason: "wrong_target",
+            surfaceMode,
+            transferId: transfer?.transferId,
+            targetMode: transfer?.targetMode,
+          });
+        } catch (_) {}
+        return;
+      }
       if (
         transfer.status !== "waiting-target" &&
         transfer.status !== "target-restoring"
       ) {
+        try {
+          console.warn("[SIDEPANEL] MOUNT_REJECT", {
+            reason: "bad_status",
+            surfaceMode,
+            transferId: transfer?.transferId,
+            status: transfer?.status,
+          });
+        } catch (_) {}
         return;
       }
       await processIncomingViewTransfer(transfer, "sidepanel-mount");
     })();
     return undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [surfaceMode, processIncomingViewTransfer]);
 
   // ── View-mode message bus ──────────────────────────────────────────────────
   useEffect(() => {

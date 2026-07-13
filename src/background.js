@@ -194,6 +194,28 @@ chrome.action?.onClicked?.addListener(async (tab) => {
   }
 });
 
+// ── View-mode session watcher (debug) ───────────────────────────────────
+// Logs every change to svdmusic.activeViewTransfer and
+// svdmusic.pendingViewSnapshot so we can verify writes from popup
+// reach session storage before the sidepanel reads them.
+chrome.storage?.session?.onChanged?.addListener?.((changes, area) => {
+  if (area !== "session") return;
+  const transferChange = changes["svdmusic.activeViewTransfer"];
+  if (transferChange) {
+    console.log("[SW] ACTIVE_TRANSFER_CHANGED", {
+      oldValue: transferChange.oldValue,
+      newValue: transferChange.newValue,
+    });
+  }
+  const snapChange = changes["svdmusic.pendingViewSnapshot"];
+  if (snapChange) {
+    console.log("[SW] PENDING_SNAPSHOT_CHANGED", {
+      oldValue: snapChange.oldValue,
+      newValue: snapChange.newValue,
+    });
+  }
+});
+
 function isGeminiUrl(url) {
   if (!url) return false;
   try {
@@ -2580,12 +2602,14 @@ async function openSidepanelWindow(windowId) {
     return { ok: false, error: "sidePanel.open unavailable or no windowId" };
   }
   try {
+    console.log("[SW] SIDEPANEL_OPEN_REQUESTED", { windowId });
     // Note: chrome.sidePanel.open requires a user gesture. The click
     // handler in the standalone page is responsible for routing this
     // call through the user-gesture window. As a fallback we still try
     // here so an automatic recovery flow (e.g. sidepanel closed by
     // another path) can re-open without a click.
     await chrome.sidePanel.open({ windowId });
+    console.log("[SW] SIDEPANEL_OPEN_RESOLVED", { windowId });
     return { ok: true };
   } catch (err) {
     console.warn("[svdmusic-bg] openSidepanelWindow failed", err);
