@@ -6,6 +6,19 @@
 
 ## Version Changelog
 
+### v1.1.8 (2026-07-14)
+- Manifest version normalized to `1.1.8` (3-part semver, previously `1.1.7.001`). Chrome MV3 was warning "Manifest version 1.1.7.1 is not semver compliant".
+- **Fix Side Panel pin-back READY handshake.** Popup "Ghim lại" was stuck at `[PIN_BACK] WAITING_READY` and timed out because Side Panel's React tree mounts once per page lifetime and `chrome.sidePanel.open({windowId})` only refocuses an already-loaded surface — no remount, no fresh useEffect run. The previous mount effect read `getTransferIdFromUrl()`, but `sidepanel.html` is static with no query string, so it always early-returned before sending READY.
+- Refactor transfer-handling code into a single shared helper `processIncomingViewTransfer(transfer, trigger)` in App.jsx, fed from three entry paths:
+ - **A. `standalone-url-mount`** — popup mounts with `?transferId=…` (URL contract preserved; no change for popup-side flow).
+ - **B. `sidepanel-mount`** — read `activeViewTransfer` from storage on Side Panel mount, no URL id required.
+ - **C. `session-onchanged`** — `chrome.storage.session.onChanged` listener registered only when `surfaceMode === "sidepanel"`, filtering on `ACTIVE_VIEW_TRANSFER_KEY` and `targetMode === "sidepanel"`.
+- Duplicate handling: `processingTransferIdsRef` + `completedTransferIdsRef` gate re-entry, plus `updateActiveViewTransfer` re-checks storage status before committing. READY is only sent AFTER ownership + snapshot restore complete.
+- Validation gates in `processIncomingViewTransfer`: transferId non-empty string; not already processing/completed; `transfer.targetMode === surfaceMode`; `status` in {`waiting-target`, `target-restoring`}; `pendingViewSnapshot.transferId` matches (when present); `chrome.windows.getCurrent().id === transfer.originWindowId` (sidepanel only).
+- `src/utils/viewMode.js`: export `STANDALONE`, `SIDEPANEL` constants (previously module-private).
+- Build: sidepanel JS 517.16 → 516.75 kB (gzip 114.35 → 114.08 kB). Diagnostic log markers trimmed to the production-grade set: `TRANSFER_DETECTED`, `TRANSFER_DUPLICATE_SKIPPED`, `OWNERSHIP_ACQUIRED`, `SNAPSHOT_APPLIED`, `SENDING_READY`, `READY_SENT`, `TRANSFER_ERROR`.
+- BG_BUILD_ID: `pin-back-sidepanel-fix-20260714-004`.
+
 ### v1.1.7-hotfix (2026-07-14)
 - Pin back: popup window did not self-close after SIDEPANEL_READY.
  - Root cause: `handlePinBackToSidePanel` in App.jsx read `popupWindowId` from session storage AFTER READY. Session state could already be cleared/overwritten, or message handler fails silently.
