@@ -1072,6 +1072,8 @@ button {
 }
 
 .emptyPlayer {
+  grid-column: 1 / -1;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2841,6 +2843,8 @@ button, input {
 }
 
 .emptyPlayer {
+  grid-column: 1 / -1;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: center;
