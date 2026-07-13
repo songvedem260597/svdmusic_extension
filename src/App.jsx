@@ -2230,15 +2230,15 @@ function App() {
       });
     } catch (_) { /* noop */ }
     if (!transfer || typeof transferId !== "string" || !transferId) {
-      try { console.warn("[TRANSFER] REJECT", { reason: "missing_transfer", trigger, surfaceMode }); } catch (_) {}
+      try { console.debug("[TRANSFER] SKIP", { reason: "missing_transfer", trigger, surfaceMode }); } catch (_) {}
       return;
     }
     if (processingTransferIdsRef.current.has(transferId)) {
-      try { console.warn("[TRANSFER] REJECT", { reason: "processing", trigger, transferId, surfaceMode }); } catch (_) {}
+      try { console.debug("[TRANSFER] SKIP", { reason: "processing", trigger, transferId, surfaceMode }); } catch (_) {}
       return;
     }
     if (completedTransferIdsRef.current.has(transferId)) {
-      try { console.warn("[TRANSFER] REJECT", { reason: "completed", trigger, transferId, surfaceMode }); } catch (_) {}
+      try { console.debug("[TRANSFER] SKIP", { reason: "completed", trigger, transferId, surfaceMode }); } catch (_) {}
       return;
     }
     const expectedTarget = surfaceMode;
@@ -2508,7 +2508,7 @@ function App() {
         });
       } catch (_) { /* noop */ }
       if (!transfer) {
-        try { console.warn("[SIDEPANEL] MOUNT_REJECT", { reason: "no_transfer", surfaceMode }); } catch (_) {}
+        try { console.debug("[SIDEPANEL] MOUNT_SKIP", { reason: "no_transfer", surfaceMode }); } catch (_) {}
         return;
       }
       if (transfer.targetMode !== SIDEPANEL) {
