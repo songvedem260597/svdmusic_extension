@@ -2423,44 +2423,14 @@ async function openStandalonePopup({ url, originWindowId }) {
     return { ok: false, error: "windows.create unavailable" };
   }
   try {
-    // Calculate popup bounds: 88% of origin window, min 1000×680, clamped to screen.
-    const MIN_W = 1000, MIN_H = 680;
-    const SCALE = 0.88;
-    let origin = null;
-    if (typeof originWindowId === "number") {
-      try { origin = await chrome.windows.get(originWindowId); } catch (_) { origin = null; }
-    }
-    if (!origin) {
-      try { origin = await chrome.windows.getCurrent(); } catch (_) { origin = null; }
-    }
-    const srcW = origin?.width || 1400;
-    const srcH = origin?.height || 900;
-    const srcL = origin?.left ?? 0;
-    const srcT = origin?.top ?? 0;
-
-    let popupW = Math.max(MIN_W, Math.round(srcW * SCALE));
-    let popupH = Math.max(MIN_H, Math.round(srcH * SCALE));
-    let popupL = srcL + Math.round((srcW - popupW) / 2);
-    let popupT = srcT + Math.round((srcH - popupH) / 2);
-
-    // Clamp to physical screen bounds if available.
-    if (origin?.id != null) {
-      try {
-        const mismatch = await chrome.windows.get(origin.id, { windowTypes: ["normal"] });
-        if (mismatch) {
-          // Still clamp using the origin window's coords as proxy.
-        }
-      } catch (_) { /* ignore */ }
-    }
-
+    // Always open at full screen so the player surface isn't constrained
+    // by a hardcoded size. Chrome's `state: "maximized"` lets the OS
+    // choose the work area; the popup grows to fill it on every monitor.
     const win = await chrome.windows.create({
       url,
       type: "popup",
+      state: "maximized",
       focused: true,
-      width: popupW,
-      height: popupH,
-      left: popupL,
-      top: popupT,
     });
     if (!win?.id) return { ok: false, error: "windows.create returned no id" };
 
