@@ -59,7 +59,6 @@ import {
   readActiveViewTransfer,
   writeActiveViewTransfer,
   updateActiveViewTransfer,
-  upsertActiveViewTransfer,
   clearActiveViewTransfer,
   readSessionValue,
   writeSessionValue,
@@ -2142,25 +2141,10 @@ function App() {
       try {
         const active = await readActiveViewTransfer();
         if (!active || active.transferId !== snapTransferId) {
-          // Try to self-heal: re-stamp this transferId as target-restoring.
-          // Uses upsert so an empty session is refilled without clobbering
-          // a newer transfer that has taken the slot.
-          try {
-            const healed = await upsertActiveViewTransfer(
-              snapTransferId,
-              {
-                transferId: snapTransferId,
-                status: "target-restoring",
-                updatedAt: Date.now(),
-              },
-              { status: "target-restoring" },
-            );
-            if (healed && healed.transferId === snapTransferId) {
-              viewModeLog("self-healed stale transfer during restore", snapTransferId);
-              return true;
-            }
-          } catch (_) { /* fall through to abort */ }
-          viewModeWarn("transfer no longer active, aborting restore", snapTransferId);
+          // Missing or replaced metadata is an explicit cancellation signal.
+          // Re-creating it here used to resurrect timed-out transfers and let
+          // an old target close a newer source during rapid toggle loops.
+          viewModeLog("transfer no longer active, aborting restore", snapTransferId);
           return false;
         }
         if (active.status !== "target-restoring") {
@@ -2302,7 +2286,7 @@ function App() {
     const expectedTarget = surfaceMode;
     if (transfer.targetMode !== expectedTarget) {
       try {
-        console.warn("[TRANSFER] REJECT", {
+        console.debug("[TRANSFER] SKIP", {
           reason: "wrong_target",
           trigger,
           transferId,
@@ -2318,7 +2302,7 @@ function App() {
       transfer.status !== "target-restoring"
     ) {
       try {
-        console.warn("[TRANSFER] REJECT", {
+        console.debug("[TRANSFER] SKIP", {
           reason: "bad_status",
           trigger,
           transferId,
@@ -2328,6 +2312,15 @@ function App() {
       } catch (_) {}
       return;
     }
+    // Claim synchronously before the first await. Mount reconciliation and
+    // storage.onChanged can otherwise both pass the guards and restore the
+    // same transfer concurrently.
+    processingTransferIdsRef.current.add(transferId);
+    // Lock the receiving view too. Without this, the new UI becomes clickable
+    // before the old source has closed and a fast reverse click overwrites the
+    // singleton transfer record mid-commit.
+    isTransferringRef.current = true;
+    setIsViewTransitioning(true);
     // Pending snapshot phải cùng transferId (nếu tồn tại).
     let pendingSnap = null;
     try {
@@ -2340,7 +2333,7 @@ function App() {
       pendingSnap.transferId !== transferId
     ) {
       try {
-        console.warn("[TRANSFER] REJECT", {
+        console.debug("[TRANSFER] SKIP", {
           reason: "snapshot_mismatch",
           trigger,
           transferId,
@@ -2348,6 +2341,7 @@ function App() {
           pendingTransferId: pendingSnap.transferId,
         });
       } catch (_) {}
+      processingTransferIdsRef.current.delete(transferId);
       return;
     }
     // Sidepanel target → window phải khớp với transfer.originWindowId.
@@ -2357,7 +2351,7 @@ function App() {
         const currentWId = w?.id ?? null;
         if (currentWId != null && currentWId !== transfer.originWindowId) {
           try {
-            console.warn("[TRANSFER] REJECT", {
+            console.debug("[TRANSFER] SKIP", {
               reason: "wrong_window",
               trigger,
               transferId,
@@ -2366,11 +2360,11 @@ function App() {
               originWindowId: transfer.originWindowId,
             });
           } catch (_) {}
+          processingTransferIdsRef.current.delete(transferId);
           return;
         }
       } catch (_) { /* noop */ }
     }
-    processingTransferIdsRef.current.add(transferId);
     let currentWindowId = null;
     if (surfaceMode === SIDEPANEL) {
       try {
@@ -2444,19 +2438,86 @@ function App() {
         });
       } catch (_) { /* noop */ }
 
-      await chrome.runtime.sendMessage({ type: readyType, ...readyPayload });
-      sentReady = true;
-
       try {
-        console.log("[SIDEPANEL] READY_SENT", {
-          trigger,
-          transferId,
-          readyType,
-        });
-      } catch (_) { /* noop */ }
+        await Promise.race([
+          chrome.runtime.sendMessage({ type: readyType, ...readyPayload }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("READY runtime timeout")), 2500)
+          ),
+        ]);
+        sentReady = true;
+        try {
+          console.log("[SIDEPANEL] READY_SENT", {
+            trigger,
+            transferId,
+            readyType,
+          });
+        } catch (_) { /* noop */ }
+      } catch (err) {
+        // Storage + BroadcastChannel below are the authoritative commit
+        // channels. A sleeping/restarting service worker must not leave two
+        // player views alive after the target has already restored.
+        try {
+          console.debug("[SIDEPANEL] READY_RUNTIME_SKIPPED", {
+            trigger,
+            transferId,
+            readyType,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } catch (_) { /* noop */ }
+      }
 
       await updateActiveViewTransfer(transferId, { status: "target-ready" });
       completedTransferIdsRef.current.add(transferId);
+      // runtime.sendMessage is primarily answered by the service worker and
+      // is not a reliable peer-to-peer signal between two extension pages.
+      // Broadcast the commit as well; the source also watches storage below.
+      postViewMessage("transfer-ready", {
+        ...readyPayload,
+        targetMode: surfaceMode,
+      });
+      // Commit from the target as well. The source may be backgrounded and
+      // miss READY, so the view that successfully restored owns source cleanup.
+      let sourceCloseMessage = null;
+      if (surfaceMode === SIDEPANEL && Number.isInteger(transfer.standaloneTabId)) {
+        sourceCloseMessage = {
+          type: "player/close-standalone-tab",
+          standaloneTabId: transfer.standaloneTabId,
+          transferId,
+        };
+      } else if (
+        surfaceMode === STANDALONE &&
+        Number.isInteger(transfer.originWindowId)
+      ) {
+        sourceCloseMessage = {
+          type: "player/sidepanel-close",
+          windowId: transfer.originWindowId,
+          transferId,
+        };
+      }
+      if (sourceCloseMessage) {
+        try {
+          await Promise.race([
+            chrome.runtime.sendMessage(sourceCloseMessage),
+            new Promise((resolve) =>
+              setTimeout(() => resolve({ ok: false, timedOut: true }), 3000)
+            ),
+          ]);
+        } catch (_) { /* source also has its own close fallback */ }
+      }
+
+      // Do not expose the target's view-mode button until the previous
+      // transfer record and snapshot are gone. This closes the cross-view
+      // double-click window during rapid open → pin → open loops.
+      await clearActiveViewTransfer(transferId);
+      try {
+        const storedSnapshot = await readSessionValue("svdmusic.pendingViewSnapshot");
+        if (storedSnapshot?.transferId === transferId) {
+          await removeSessionValue("svdmusic.pendingViewSnapshot");
+        }
+      } catch (_) { /* noop */ }
+      isTransferringRef.current = false;
+      setIsViewTransitioning(false);
     } catch (err) {
       try {
         console.error("[SIDEPANEL] TRANSFER_ERROR", {
@@ -2469,6 +2530,11 @@ function App() {
       } catch (_) { /* noop */ }
     } finally {
       processingTransferIdsRef.current.delete(transferId);
+      // Never leave the receiving UI permanently disabled. Successful targets
+      // have already attempted source cleanup; failed targets let the source
+      // timeout/rollback path remain authoritative.
+      isTransferringRef.current = false;
+      setIsViewTransitioning(false);
     }
   }, [surfaceMode]);
 
@@ -2571,7 +2637,7 @@ function App() {
       }
       if (transfer.targetMode !== SIDEPANEL) {
         try {
-          console.warn("[SIDEPANEL] MOUNT_REJECT", {
+          console.debug("[SIDEPANEL] MOUNT_SKIP", {
             reason: "wrong_target",
             surfaceMode,
             transferId: transfer?.transferId,
@@ -2585,7 +2651,7 @@ function App() {
         transfer.status !== "target-restoring"
       ) {
         try {
-          console.warn("[SIDEPANEL] MOUNT_REJECT", {
+          console.debug("[SIDEPANEL] MOUNT_SKIP", {
             reason: "bad_status",
             surfaceMode,
             transferId: transfer?.transferId,
@@ -2680,15 +2746,48 @@ function App() {
   // directly into chrome.sidePanel.open. chrome.sidePanel.open
   // requires a user gesture — bouncing through chrome.runtime will
   // fail silently if the SW tries to open from a non-gesture context.
+  async function hasFreshViewTransferInFlight() {
+    try {
+      const active = await readActiveViewTransfer();
+      if (!active?.transferId) return false;
+      const activeStatuses = new Set([
+        "preparing",
+        "waiting-target",
+        "target-restoring",
+        "target-ready",
+      ]);
+      if (!activeStatuses.has(active.status)) return false;
+      const lastTouched = Number(active.updatedAt || active.createdAt || 0);
+      const ageMs = lastTouched > 0 ? Date.now() - lastTouched : 0;
+      if (ageMs <= VIEW_TRANSFER_TIMEOUT_MS + 5000) return true;
+      // Recover from metadata left by an older build or a killed Chrome view.
+      await clearActiveViewTransfer(active.transferId);
+      return false;
+    } catch (_) {
+      // Storage being temporarily unavailable should not create a second
+      // transfer. Let the current click retry after the view settles.
+      return true;
+    }
+  }
+
   // ── Detach: sidepanel → standalone ─────────────────────────────────────────
   // Flow: capture → persist → create transfer metadata → release ownership →
   // post pending-snapshot to storage → create/focus standalone tab → wait
   // STANDALONE_READY with matching transferId → close sidepanel.
-  // On error or 10s timeout: rollback ownership, restore state, keep sidepanel.
+  // On error or timeout: rollback ownership, restore state, keep sidepanel.
   async function handleDetachToStandalone() {
-    if (isViewTransitioning) return;
-    setIsViewTransitioning(true);
+    // The ref is the synchronous lock. React state updates are batched, so
+    // state alone cannot stop two clicks delivered in the same frame.
+    if (isTransferringRef.current) return;
     isTransferringRef.current = true;
+    setIsViewTransitioning(true);
+    if (await hasFreshViewTransferInFlight()) {
+      viewModeLog("detach skipped: another transfer is still committing");
+      isTransferringRef.current = false;
+      setIsViewTransitioning(false);
+      setViewModeToast("Đang hoàn tất lần chuyển trước, vui lòng bấm lại sau một chút.");
+      return;
+    }
 
     // 1. Capture snapshot while audio is still ours.
     let snap;
@@ -2742,18 +2841,16 @@ function App() {
       return;
     }
 
-    // 6. Update transfer to waiting-target.  MUST happen before any
-    // tab operation so the target can read the transfer metadata.
-    await updateActiveViewTransfer(transferId, { status: "waiting-target" });
-
-    // 7. Set up readyPromise BEFORE we create or focus any tab.
+    // 6. Set up readyPromise BEFORE publishing waiting-target or creating /
+    // focusing a tab. An already-mounted target can answer in the same tick.
     // This ensures the listener is active the moment the target mounts,
-    // even on a fast CPU. The promise races a 10-second timeout against
+    // even on a fast CPU. The promise races the transfer timeout against
     // the SW/BroadcastChannel READY signal.
     let resolveReady;
     const readyPromise = new Promise((resolve) => { resolveReady = resolve; });
     const timerId = setTimeout(async () => {
-      viewModeWarn("detach timeout: no READY");
+      viewModeLog("detach timeout: no READY");
+      clearReadyListeners();
       viewTransferCleanupRef.current = null;
       isTransferringRef.current = false;
       await clearActiveViewTransfer(transferId);
@@ -2773,6 +2870,10 @@ function App() {
       viewTransferCleanupRef.current = null;
       if (unsubBc) { unsubBc(); unsubBc = null; }
       if (removeListener) { removeListener(); removeListener = null; }
+      if (removeStorageListener) {
+        removeStorageListener();
+        removeStorageListener = null;
+      }
     };
 
     // BroadcastChannel listener.
@@ -2793,6 +2894,25 @@ function App() {
       }
     };
     chrome.runtime.onMessage.addListener(removeListener);
+
+    // The transfer record is the durable READY channel. This covers Chrome
+    // builds where runtime messages are consumed by the service worker and a
+    // BroadcastChannel event is delayed while a view is backgrounded.
+    let removeStorageListener = null;
+    const storageReadyListener = (changes, area) => {
+      if (area !== "session") return;
+      const next = changes?.[ACTIVE_VIEW_TRANSFER_KEY]?.newValue;
+      if (next?.transferId !== transferId || next?.status !== "target-ready") return;
+      clearReadyListeners();
+      resolveReady({ timedOut: false });
+    };
+    chrome.storage.session.onChanged.addListener(storageReadyListener);
+    removeStorageListener = () => {
+      try { chrome.storage.session.onChanged.removeListener(storageReadyListener); } catch (_) { /* noop */ }
+    };
+
+    // 7. Publish waiting-target only after both READY listeners are active.
+    await updateActiveViewTransfer(transferId, { status: "waiting-target" });
 
     // 8. Duplicate-popup guard: focus existing popup if one exists.
     let existingWindowId = null;
@@ -2907,7 +3027,7 @@ function App() {
   // Flow: capture → persist → create transfer → release ownership → open
   // sidepanel directly in user gesture → wait SIDEPANEL_READY with transferId →
   // close standalone tab.
-  // On error or 10s timeout: rollback ownership, restore state, keep standalone.
+  // On error or timeout: rollback ownership, restore state, keep standalone.
   async function handlePinBackToSidePanel(event) {
     try {
       console.log("[PIN_BACK] ENTER", {
@@ -2917,10 +3037,10 @@ function App() {
         isTransferring: isTransferringRef.current,
       });
     } catch (_) { /* noop */ }
-    if (isViewTransitioning) {
+    if (isTransferringRef.current) {
       try {
-        console.warn("[PIN_BACK] EARLY_RETURN", {
-          reason: "isViewTransitioning",
+        console.debug("[PIN_BACK] SKIP", {
+          reason: "transfer_in_progress",
           isViewTransitioning,
           isTransferring: isTransferringRef.current,
           surfaceMode,
@@ -2928,15 +3048,25 @@ function App() {
       } catch (_) { /* noop */ }
       return;
     }
-    setIsViewTransitioning(true);
     isTransferringRef.current = true;
+    setIsViewTransitioning(true);
+    if (await hasFreshViewTransferInFlight()) {
+      viewModeLog("pin skipped: another transfer is still committing");
+      isTransferringRef.current = false;
+      setIsViewTransitioning(false);
+      setViewModeToast("Đang hoàn tất lần chuyển trước, vui lòng bấm lại sau một chút.");
+      return;
+    }
 
-    // 1. Capture popupWindowId FIRST.
+    // 1. Capture the exact source tab + window FIRST. Closing the tab is more
+    // reliable than closing a maximized popup window and also supports users
+    // who opened the standalone URL in a normal Chrome tab.
     // chrome.windows.getCurrent() inside a popup returns the popup's own ID.
     // Capturing it here means we never depend on session state that may
     // have been cleared (e.g. by a previous chrome.windows.onRemoved run)
     // or overwritten by another path.
     let popupWindowId = null;
+    let standaloneTabId = null;
     try {
       const currentWindow = await chrome.windows.getCurrent();
       popupWindowId = currentWindow?.id ?? null;
@@ -2944,7 +3074,20 @@ function App() {
       popupWindowId = null;
     }
     try {
-      console.log("[PIN_BACK] POPUP_ID_CAPTURED", { popupWindowId });
+      const currentTab = await chrome.tabs.getCurrent();
+      standaloneTabId = currentTab?.id ?? null;
+    } catch (_) {
+      standaloneTabId = null;
+    }
+    if (!Number.isInteger(standaloneTabId)) {
+      try {
+        const tabState = await chrome.storage.session.get(STANDALONE_TAB_ID_KEY);
+        const storedTabId = tabState?.[STANDALONE_TAB_ID_KEY];
+        if (Number.isInteger(storedTabId)) standaloneTabId = storedTabId;
+      } catch (_) { /* noop */ }
+    }
+    try {
+      console.log("[PIN_BACK] SOURCE_CAPTURED", { popupWindowId, standaloneTabId });
     } catch (_) { /* noop */ }
     if (popupWindowId == null) {
       try {
@@ -2983,6 +3126,7 @@ function App() {
       sourceMode: surfaceMode,
       targetMode: "sidepanel",
       sourceInstanceId: instanceIdRef.current,
+      standaloneTabId,
       standaloneWindowId: popupWindowId,
     });
     await writeActiveViewTransfer(transfer);
@@ -3000,13 +3144,6 @@ function App() {
     if (targetWindowId == null && event?.view?.windowId != null) {
       targetWindowId = event.view.windowId;
     }
-
-    // 6. Update transfer to waiting-target BEFORE releasing ownership or
-    // opening the sidepanel so the target can read it immediately on mount.
-    await updateActiveViewTransfer(transferId, {
-      status: "waiting-target",
-      standaloneWindowId: popupWindowId,
-    });
 
     if (targetWindowId == null) {
       try {
@@ -3065,16 +3202,13 @@ function App() {
         targetMode: "sidepanel",
       });
     }
-    await updateActiveViewTransfer(transferId, {
-      status: "waiting-target",
-      standaloneWindowId: popupWindowId,
-    });
-
-    // 8. Set up readyPromise BEFORE we open the sidepanel.
+    // 8. Set up readyPromise BEFORE publishing waiting-target or opening the
+    // sidepanel. A hidden-but-mounted sidepanel can answer immediately.
     let resolveReady;
     const readyPromise = new Promise((resolve) => { resolveReady = resolve; });
     const timerId = setTimeout(async () => {
-      viewModeWarn("pin timeout: no SIDEPANEL_READY");
+      viewModeLog("pin timeout: no SIDEPANEL_READY");
+      clearReadyListeners();
       viewTransferCleanupRef.current = null;
       isTransferringRef.current = false;
       await clearActiveViewTransfer(transferId);
@@ -3097,6 +3231,10 @@ function App() {
       viewTransferCleanupRef.current = null;
       if (unsubBc) { unsubBc(); unsubBc = null; }
       if (removeListener) { removeListener(); removeListener = null; }
+      if (removeStorageListener) {
+        removeStorageListener();
+        removeStorageListener = null;
+      }
     };
 
     let unsubBc = null;
@@ -3126,6 +3264,27 @@ function App() {
       resolveReady({ timedOut: false });
     };
     chrome.runtime.onMessage.addListener(removeListener);
+
+    let removeStorageListener = null;
+    const storageReadyListener = (changes, area) => {
+      if (area !== "session") return;
+      const next = changes?.[ACTIVE_VIEW_TRANSFER_KEY]?.newValue;
+      if (next?.transferId !== transferId || next?.status !== "target-ready") return;
+      clearReadyListeners();
+      resolveReady({ timedOut: false });
+    };
+    chrome.storage.session.onChanged.addListener(storageReadyListener);
+    removeStorageListener = () => {
+      try { chrome.storage.session.onChanged.removeListener(storageReadyListener); } catch (_) { /* noop */ }
+    };
+
+    // The target must not observe waiting-target until the source is ready to
+    // receive its READY response.
+    await updateActiveViewTransfer(transferId, {
+      status: "waiting-target",
+      originWindowId: targetWindowId,
+      standaloneWindowId: popupWindowId,
+    });
 
     // 9. Open sidepanel synchronously within the user gesture.
     let opened = false;
@@ -3210,7 +3369,7 @@ function App() {
     } catch (_) { /* noop */ }
     if (result.timedOut) {
       try {
-        console.warn("[PIN_BACK] TIMEOUT", {
+        console.debug("[PIN_BACK] TIMEOUT", {
           transferId,
           popupWindowId,
           originWindowId: targetWindowId,
@@ -3259,6 +3418,7 @@ function App() {
     try {
       closeResult = await chrome.runtime.sendMessage({
         type: "player/close-standalone-popup",
+        standaloneTabId,
         standaloneWindowId: popupWindowId,
         transferId,
       });
@@ -3296,11 +3456,31 @@ function App() {
       });
     } catch (_) { /* noop */ }
 
-    // Popup close is best-effort after READY. If it failed we leave it open
-    // — the user can close it manually. We do NOT undo the sidepanel restore
-    // because that would re-introduce double-play risk.
-    // Standalone will unmount shortly either way; don't reset isViewTransitioning
-    // since this view is about to close.
+    // Last-resort self-close. The sidepanel is already authoritative after
+    // READY, so keeping this source alive is worse than retrying the exact tab
+    // removal locally.
+    if (closeResult?.ok !== true && Number.isInteger(standaloneTabId)) {
+      try {
+        await chrome.tabs.remove(standaloneTabId);
+        return;
+      } catch (err) {
+        try {
+          console.debug("[PIN_BACK] DIRECT_TAB_CLOSE_FAILED", {
+            transferId,
+            standaloneTabId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } catch (_) { /* noop */ }
+      }
+    }
+
+    if (closeResult?.ok !== true) {
+      // Do not leave the full view visually stuck if Chrome refused both close
+      // paths. It remains non-owner, while the user can retry the pin action.
+      isTransferringRef.current = false;
+      setIsViewTransitioning(false);
+      setViewModeToast("Side Panel đã mở nhưng Chrome chưa đóng tab này. Hãy bấm Ghim lại lần nữa.");
+    }
   }
 
   function handleViewModeClick(event) {
@@ -3312,7 +3492,7 @@ function App() {
         type: event?.type,
       });
     } catch (_) { /* noop */ }
-    if (isViewTransitioning) return;
+    if (isViewTransitioning || isTransferringRef.current) return;
     if (isStandalone) {
       handlePinBackToSidePanel(event);
     } else {

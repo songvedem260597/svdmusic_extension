@@ -49,7 +49,10 @@ export const STANDALONE_TAB_ID_KEY = "svdmusic.standaloneTabId";
 export const ORIGIN_WINDOW_ID_KEY = "svdmusic.originWindowId";
 export const STANDALONE_WINDOW_ID_KEY = "svdmusic.standaloneWindowId";
 export const POPUP_BOUNDS_KEY = "svdmusic.popupBounds";
-export const VIEW_TRANSFER_TIMEOUT_MS = 10_000;
+// A cold target can spend up to ~16.5s waiting for the song and audio
+// metadata before it can confirm the hand-off. Keep the source alive long
+// enough for that legitimate restore path (plus a small scheduling margin).
+export const VIEW_TRANSFER_TIMEOUT_MS = 25_000;
 
 // Lazy BroadcastChannel — Chrome MV3 supports it but we still gate on
 // typeof so a degraded context can no-op without throwing.
@@ -184,7 +187,7 @@ export function writeActiveViewTransfer(transfer) {
 export async function updateActiveViewTransfer(transferId, updates) {
   const active = await readActiveViewTransfer();
   if (!active || active.transferId !== transferId) return null;
-  const next = { ...active, ...updates };
+  const next = { ...active, ...updates, updatedAt: Date.now() };
   await writeActiveViewTransfer(next);
   return next;
 }

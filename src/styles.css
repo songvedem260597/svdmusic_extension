@@ -7235,9 +7235,16 @@ html[data-theme="light"] body {
   background: rgba(241, 245, 249, 0.2);
 }
 
-.theme-light .topBar {
-  border-bottom: 0;
-  background: transparent;
+.appShell.theme-light .topBar {
+  border: 0;
+  background-color: rgba(248, 250, 252, 0.94);
+  background-image: linear-gradient(
+    90deg,
+    rgba(241, 245, 249, 0.96),
+    rgba(255, 255, 255, 0.92)
+  );
+  -webkit-backdrop-filter: blur(16px) saturate(1.08);
+  backdrop-filter: blur(16px) saturate(1.08);
   box-shadow: none;
 }
 
@@ -7418,101 +7425,167 @@ html[data-theme="light"] body {
   opacity: 0.82;
 }
 
-/* Light lyrics view: retain the song artwork as atmosphere instead of
-   bleaching the entire stage white. The lyrics sit on a restrained glass
-   surface, giving the five-line window a clear focal area on wide displays. */
+/* Light lyrics view: the artwork is the stage. Keep the layout frameless and
+   use only a light wash over the image so lyrics remain readable. */
+.theme-light .pageGrid.view-lyrics {
+  position: relative;
+  gap: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
+}
+
 .theme-light .pageGrid.view-lyrics .lyricsPanel {
-  border: 1px solid #cbd5df;
-  border-radius: 24px;
-  background: #e6edf3;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    0 18px 46px rgba(15, 23, 42, 0.08);
+  position: absolute;
+  inset: 0;
+  flex: none;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .theme-light .lyricsBgImage {
-  opacity: 0.34;
-  filter: blur(48px) saturate(0.82) contrast(1.08);
-  transform: scale(1.28);
+  opacity: 0.82;
+  filter: blur(14px) saturate(0.94) contrast(1.04);
+  transform: scale(1.1);
 }
 
 .theme-light .lyricsBgShade {
   background:
     radial-gradient(
       circle at 20% 52%,
-      rgba(255, 255, 255, 0.08) 0%,
-      rgba(230, 237, 243, 0.34) 38%,
-      rgba(238, 243, 247, 0.68) 72%
+      rgba(8, 15, 26, 0.12) 0%,
+      rgba(8, 15, 26, 0.2) 46%,
+      rgba(8, 15, 26, 0.3) 82%
     ),
     linear-gradient(
       105deg,
-      rgba(218, 228, 236, 0.58) 0%,
-      rgba(239, 244, 248, 0.72) 48%,
-      rgba(248, 250, 252, 0.88) 100%
+      rgba(8, 15, 26, 0.16) 0%,
+      rgba(8, 15, 26, 0.26) 52%,
+      rgba(8, 15, 26, 0.36) 100%
     );
+}
+
+/* Lyrics mode uses the fixed ambient layer as the single full-viewport
+   artwork source. This lets the transparent header reveal the same image as
+   the lyrics stage instead of the pale default ambient wash. */
+.appShell.theme-light.lyricsView .ambientBg > img:not(.ambientBgCustom) {
+  display: block;
+  opacity: 0.82;
+  filter: blur(14px) saturate(0.94) contrast(1.04);
+  transform: scale(1.1);
+}
+
+.appShell.theme-light.lyricsView .ambientBg::after {
+  background:
+    radial-gradient(
+      circle at 20% 52%,
+      rgba(8, 15, 26, 0.12) 0%,
+      rgba(8, 15, 26, 0.2) 46%,
+      rgba(8, 15, 26, 0.3) 82%
+    ),
+    linear-gradient(
+      105deg,
+      rgba(8, 15, 26, 0.16) 0%,
+      rgba(8, 15, 26, 0.26) 52%,
+      rgba(8, 15, 26, 0.36) 100%
+    );
+}
+
+.appShell.theme-light.lyricsView .ambientBgShade {
+  background: transparent;
+}
+
+.appShell.theme-light.lyricsView .lyricsBgImage,
+.appShell.theme-light.lyricsView .lyricsBgShade {
+  display: none;
 }
 
 .theme-light .lyricsStage {
   gap: clamp(40px, 5vw, 76px);
   width: min(1440px, calc(100% - 64px));
+  padding-bottom: calc(var(--ui-player-height) + clamp(12px, 3vh, 32px));
 }
 
 .theme-light .lyricsColumn {
-  padding: clamp(20px, 2.4vw, 36px);
-  border: 1px solid rgba(148, 163, 184, 0.34);
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    0 22px 54px rgba(51, 65, 85, 0.1);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  backdrop-filter: blur(18px) saturate(1.08);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .theme-light .lyricsBox {
   color: #526173;
+  -webkit-font-smoothing: auto;
+  text-rendering: optimizeLegibility;
+  font-synthesis: none;
 }
 
 .theme-light .lyricsBox .lyricLine,
 .theme-light .lyricsBox .lyricNotice {
-  color: #536274;
-  font-weight: 500;
-  opacity: 0.68;
+  color: #ececec;
+  font-weight: 600;
+  opacity: 0.56;
   text-shadow: none;
   filter: none;
+  transform: none;
+  will-change: auto;
+  animation: lightLyricLineEnter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 180ms ease;
 }
 
 .theme-light .lyricsBox .lyricLine:hover {
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.54);
-  color: #243244;
-  opacity: 0.92;
+  border-radius: 0;
+  background: transparent;
+  color: #565b63;
+  opacity: 1;
 }
 
 .theme-light .lyricsBox .activeLyric,
 .theme-light .lyricsBox .activeLyric:hover {
-  border: 1px solid rgba(0, 122, 85, 0.2);
-  border-radius: 16px;
-  background: linear-gradient(90deg, rgba(0, 122, 85, 0.07), rgba(0, 122, 85, 0.12));
-  color: #006747;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #ffff00;
   opacity: 1;
-  font-weight: 750;
+  font-size: clamp(1.3rem, 1.25vw + 0.75rem, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
   text-shadow: none;
   filter: none;
-  box-shadow:
-    inset 3px 0 0 rgba(0, 122, 85, 0.76),
-    0 10px 28px rgba(0, 122, 85, 0.08);
-  animation: lightLyricActiveEnter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: none;
+  transform: none;
+  will-change: auto;
+  animation: lightLyricActiveEnter 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lightLyricLineEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 0.56;
+    transform: none;
+  }
 }
 
 @keyframes lightLyricActiveEnter {
   0% {
-    opacity: 0.55;
-    transform: translateY(5px) scale(0.985);
+    opacity: 0.28;
+    transform: translateY(7px);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 }
 
@@ -7548,7 +7621,7 @@ html[data-theme="light"] body {
 
 @media (max-width: 768px) {
   .theme-light .pageGrid.view-lyrics .lyricsPanel {
-    border-radius: 18px;
+    border-radius: 0;
   }
 
   .theme-light .lyricsStage {
@@ -7558,26 +7631,26 @@ html[data-theme="light"] body {
 
   .theme-light .lyricsColumn {
     width: 100%;
-    padding: 12px 8px;
-    border-radius: 18px;
+    padding: 0;
+    border-radius: 0;
   }
 
   .theme-light .lyricsBox .activeLyric,
   .theme-light .lyricsBox .activeLyric:hover {
-    border-radius: 12px;
-    box-shadow: inset 3px 0 0 rgba(0, 122, 85, 0.72);
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 
 @media (max-width: 560px) {
   .theme-light .pageGrid.view-lyrics .lyricsPanel {
-    border-radius: 14px;
+    border-radius: 0;
   }
 
   .theme-light .lyricsColumn {
-    padding: 8px 4px;
-    border-color: rgba(148, 163, 184, 0.24);
-    background: rgba(255, 255, 255, 0.48);
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
     box-shadow: none;
   }
 }
