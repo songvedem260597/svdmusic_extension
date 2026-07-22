@@ -27,20 +27,16 @@ function buildApiPrompt(youtubeUrl) {
     "Nhạc Đồng quê, Nhạc Cổ điển, K-Pop, Nhạc Mỹ Latinh, Indie & Alternative, " +
     "Jazz, Blues, Metal, Nhạc Trẻ, Nhạc Trữ tình & Bolero, Nhạc Không lời, " +
     "Nhạc Thiếu nhi, Reggae, Folk & Acoustic";
-  return (
-    "Hãy tạo nội dung LRC từ Link: " +
-    youtubeUrl +
-    "\n" +
-    "Hãy đối chiếu đúng lời lyrics thực tế của bài hát trong video.\n" +
-    "Sửa LRC cho đúng vì phụ đề có thể không đúng so với thực tế.\n" +
-    "Kết quả trả về đúng format:\n" +
-    "Tên bài hát: ...\n" +
-    "Tên các ca sỹ: ...\n" +
-    "Thể loại nhạc: ...  (phải thuộc danh sách: " + GENRE_LIST + ")\n" +
-    "[mm:ss.xx] lời bài hát\n" +
-    "[mm:ss.xx] lời bài hát\n" +
-    "Không mô tả gì thêm."
-  );
+  return [
+    "Hãy trích xuất nội dung LRC từ Link: " + youtubeUrl + ". Hãy đối chiếu đúng lời lyrics thực tế nghe được trong video với lời bài hát thực tế và chỉnh sửa lại thời gian/lời cho chuẩn xác do phụ đề tự động có thể bị sai.",
+    "Yêu cầu xuất kết quả trực tiếp dưới dạng văn bản thô (raw text) trong khung code block, KHÔNG tạo file tải về hay liên kết tải xuống.",
+    "Cấu trúc kết quả trả về bắt buộc:",
+    "Tên bài hát: ...",
+    "Tên các ca sỹ: ...",
+    "Thể loại nhạc: ... (phải thuộc danh sách: " + GENRE_LIST + ")",
+    "Nội dung LRC raw text đặt hoàn toàn trong khung ```text ... ``` với đầy đủ mốc thời gian [mm:ss.xx] và lời bài hát.",
+    "Không mô tả hay giải thích gì thêm.",
+  ].join("\n");
 }
 
 // ── chrome.storage helpers ──────────────────────────────────────────────────────

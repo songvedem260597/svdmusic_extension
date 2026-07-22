@@ -90,6 +90,20 @@ function setImageFallback(img, fallback) {
   img.src = fallback;
 }
 
+function updateNowPlayingCoverCrop(event) {
+  const image = event?.currentTarget;
+  const stack = image?.closest?.(".coverStack");
+  if (!image || !stack || !image.naturalWidth || !image.naturalHeight) return;
+
+  // YouTube hqdefault is 480×360 and letterboxes a 16:9 frame with 45px
+  // black bars above and below. Existing songs may still hold that blob in
+  // IndexedDB. Only crop this known 4:3 shape; newer maxres/sd thumbnails
+  // are 16:9 and already fill the frame correctly through object-fit: cover.
+  const aspectRatio = image.naturalWidth / image.naturalHeight;
+  const isYoutubeLetterboxedFourThree = aspectRatio >= 1.3 && aspectRatio <= 1.37;
+  stack.classList.toggle("hasLetterboxArtwork", isYoutubeLetterboxedFourThree);
+}
+
 const SEEK_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End", "PageDown", "PageUp"]);
 const PERSIST_THROTTLE_MS = 1500;
 
@@ -1390,6 +1404,46 @@ function App() {
     playAudio();
   }
 
+  // Global playback shortcut. Space toggles play/pause while the app canvas
+  // has focus, but remains a normal Space key inside editable controls,
+  // sliders, buttons, links and open overlays.
+  useEffect(() => {
+    function handleGlobalPlaybackShortcut(event) {
+      if ((event.code !== "Space" && event.key !== " ") || event.repeat) return;
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      if (!currentSong || isAddSongOpen || isSettingsOpen || isLibraryOpen || contextMenu) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"], [role="slider"]'
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      togglePlay();
+    }
+
+    document.addEventListener("keydown", handleGlobalPlaybackShortcut);
+    return () => document.removeEventListener("keydown", handleGlobalPlaybackShortcut);
+  }, [
+    currentSong?.id,
+    audioMissing,
+    isPlaying,
+    ownsAudio,
+    isAddSongOpen,
+    isSettingsOpen,
+    isLibraryOpen,
+    contextMenu,
+  ]);
+
   function handlePlayControlPointerDown(event) {
     event.preventDefault();
     ignoreNextPlayClickRef.current = true;
@@ -1953,9 +2007,13 @@ function App() {
   // Custom image opacity stays 1; the slider drives the shade/gradient
   // overlay thickness instead. See styles.css .appShell.homeView.hasCustomBg rules.
   const bgStrength = backgroundOpacity / 100;
-  const shadeOpacity = 0.75 - bgStrength * 0.55;
-  const gradientTop = Math.max(0.08, shadeOpacity - 0.15);
-  const gradientBottom = Math.min(0.65, shadeOpacity + 0.12);
+  const backgroundOverlayScale = theme === "light" ? 0.55 : 1;
+  const baseShadeOpacity = 0.75 - bgStrength * 0.55;
+  const shadeOpacity = baseShadeOpacity * backgroundOverlayScale;
+  const gradientTop =
+    Math.max(0.08, baseShadeOpacity - 0.15) * backgroundOverlayScale;
+  const gradientBottom =
+    Math.min(0.65, baseShadeOpacity + 0.12) * backgroundOverlayScale;
 
   const appShellClass = [
     "appShell",
@@ -3603,10 +3661,24 @@ function App() {
       {/* Top bar */}
       <header className="topBar">
         <a className="brand" href="#" aria-label="SVD Music">
-          <img
-            src="/images/Logo.png"
-            alt="SVD Music"
-          />
+          <svg
+            className="brandMark"
+            viewBox="0 0 44 44"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <rect className="brandMarkTile" x="1" y="1" width="42" height="42" rx="13" />
+            <path
+              className="brandMarkWave"
+              d="M8 23h5l3.4-9 5.2 19 5-22 4.2 15H36"
+              pathLength="100"
+            />
+            <circle className="brandMarkDot" cx="36" cy="23" r="2.4" />
+          </svg>
+          <span className="brandWordmark" aria-hidden="true">
+            <span className="brandInitials">SVD</span>
+            <span className="brandMusic">Music</span>
+          </span>
         </a>
 
         <div
@@ -3832,6 +3904,7 @@ function App() {
                   className="coverBase"
                   src={resolvedCoverUrl || currentSong?.cover}
                   alt=""
+                  onLoad={updateNowPlayingCoverCrop}
                   onError={(e) => setImageFallback(e.currentTarget, COVER_FALLBACK)}
                 />
                 <img
@@ -4028,6 +4101,8 @@ function App() {
               onClick={handlePlayControlClick}
               onKeyDown={handlePlayControlKeyDown}
               aria-label={isPlaying ? "Pause" : "Play"}
+              aria-keyshortcuts="Space"
+              title={isPlaying ? "Tạm dừng (Space)" : "Phát (Space)"}
               disabled={!currentSong}
             >
               {isPlaying ? <Pause size={15} /> : <Play size={15} fill="currentColor" />}

@@ -263,6 +263,120 @@ function extractYoutubeVideoId(url) {
 const ownedYt2mp3Tabs = new Set();
 const MP3COW_BRIDGE_BASE = "https://mp3cow.com";
 const ownedMp3cowTabs = new Set();
+// A CDN can return response headers and then stream the MP3 slowly. A fixed
+// 20-second deadline incorrectly aborted healthy downloads, while no deadline
+// at all could hang forever. Abort only when no byte arrives for 30 seconds,
+// with a separate hard ceiling as a final guard.
+const MP3_WORKER_IDLE_TIMEOUT_MS = 30_000;
+const MP3_WORKER_MAX_TIMEOUT_MS = 3 * 60_000;
+const MP3_PAGE_FETCH_TIMEOUT_MS = 60_000;
+
+async function fetchMp3BlobInWorker(downloadURL, stage, onProgress) {
+  const controller = new AbortController();
+  let timeoutReason = "";
+  let idleTimer = null;
+  const maxTimer = setTimeout(() => {
+    timeoutReason = "MAX";
+    controller.abort();
+  }, MP3_WORKER_MAX_TIMEOUT_MS);
+
+  const resetIdleTimer = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      timeoutReason = "IDLE";
+      controller.abort();
+    }, MP3_WORKER_IDLE_TIMEOUT_MS);
+  };
+
+  const reportProgress = (receivedBytes, totalBytes) => {
+    if (typeof onProgress !== "function") return;
+    try {
+      onProgress({
+        receivedBytes,
+        totalBytes,
+        progress:
+          totalBytes && totalBytes > 0
+            ? Math.min(100, (receivedBytes / totalBytes) * 100)
+            : null,
+      });
+    } catch (_) { /* progress is best-effort */ }
+  };
+
+  try {
+    // Cover both the wait for response headers and pauses between body chunks.
+    resetIdleTimer();
+    const response = await fetch(downloadURL, {
+      headers: { Accept: "audio/mpeg, audio/*" },
+      credentials: "omit",
+      signal: controller.signal,
+    });
+    if (!response.ok) return { response, blob: null };
+
+    const contentLength = Number(response.headers.get("content-length"));
+    const totalBytes =
+      Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null;
+    const contentType = response.headers.get("content-type") || "audio/mpeg";
+
+    // Read the stream ourselves so every received chunk proves the connection
+    // is alive and resets the idle watchdog. `arrayBuffer()` is opaque and
+    // cannot distinguish a slow download from a dead connection.
+    if (response.body && typeof response.body.getReader === "function") {
+      const reader = response.body.getReader();
+      const chunks = [];
+      let receivedBytes = 0;
+      let lastReportAt = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value || value.byteLength === 0) continue;
+
+        chunks.push(value);
+        receivedBytes += value.byteLength;
+        resetIdleTimer();
+
+        const now = Date.now();
+        if (lastReportAt === 0 || now - lastReportAt >= 5000) {
+          reportProgress(receivedBytes, totalBytes);
+          lastReportAt = now;
+        }
+      }
+
+      reportProgress(receivedBytes, totalBytes || receivedBytes);
+      return {
+        response,
+        blob: new Blob(chunks, { type: contentType }),
+      };
+    }
+
+    // Compatibility fallback for environments without a readable body stream.
+    const buffer = await response.arrayBuffer();
+    reportProgress(buffer.byteLength, totalBytes || buffer.byteLength);
+    return {
+      response,
+      blob: new Blob([buffer], {
+        type: contentType,
+      }),
+    };
+  } catch (error) {
+    if (timeoutReason || error?.name === "AbortError") {
+      const timeoutText =
+        timeoutReason === "MAX"
+          ? `quá ${MP3_WORKER_MAX_TIMEOUT_MS / 60_000} phút`
+          : `không nhận thêm dữ liệu trong ${MP3_WORKER_IDLE_TIMEOUT_MS / 1000} giây`;
+      const timeoutError = new Error(
+        `${stage}: MP3_FETCH_TIMEOUT (${timeoutText}).`
+      );
+      timeoutError.code = "MP3_FETCH_TIMEOUT";
+      timeoutError.mp3Stage = stage;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+    clearTimeout(maxTimer);
+  }
+}
 
 function isMp3cowBridgeUrl(value) {
   try {
@@ -521,7 +635,19 @@ function mp3cowConvertMain(youtubeId) {
 // bypasses CDN CORS restrictions. Returns base64-encoded bytes.
 function mp3cowFetchMain(payload) {
   var url = payload && payload.url;
-  return fetch(url, { credentials: "omit" })
+  var timeoutMs = Number(payload && payload.timeoutMs) || 60000;
+  var controller = typeof AbortController === "function" ? new AbortController() : null;
+  var timedOut = false;
+  var timer = controller
+    ? setTimeout(function () {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : null;
+  var options = { credentials: "omit" };
+  if (controller) options.signal = controller.signal;
+
+  return fetch(url, options)
     .then(function (response) {
       if (!response.ok) {
         return {
@@ -558,10 +684,17 @@ function mp3cowFetchMain(payload) {
     .catch(function (e) {
       return {
         __yt2mp3Error: {
-          stage: "MP3_FETCH_FAILED",
-          message: "fetch() lỗi: " + (e && e.message ? e.message : String(e)),
+          stage: timedOut || (e && e.name === "AbortError")
+            ? "MP3_FETCH_TIMEOUT"
+            : "MP3_FETCH_FAILED",
+          message: timedOut || (e && e.name === "AbortError")
+            ? "Tải MP3 quá " + Math.round(timeoutMs / 1000) + " giây."
+            : "fetch() lỗi: " + (e && e.message ? e.message : String(e)),
         },
       };
+    })
+    .finally(function () {
+      if (timer) clearTimeout(timer);
     });
 }
 
@@ -695,7 +828,19 @@ function yt2mp3ConvertMain(youtubeId) {
 
 function yt2mp3FetchMain(payload) {
   var url = payload && payload.url;
-  return fetch(url, { credentials: "omit" })
+  var timeoutMs = Number(payload && payload.timeoutMs) || 60000;
+  var controller = typeof AbortController === "function" ? new AbortController() : null;
+  var timedOut = false;
+  var timer = controller
+    ? setTimeout(function () {
+        timedOut = true;
+        controller.abort();
+      }, timeoutMs)
+    : null;
+  var options = { credentials: "omit" };
+  if (controller) options.signal = controller.signal;
+
+  return fetch(url, options)
     .then(function (response) {
       if (!response.ok) {
         return {
@@ -732,10 +877,17 @@ function yt2mp3FetchMain(payload) {
     .catch(function (e) {
       return {
         __yt2mp3Error: {
-          stage: "MP3_FETCH_FAILED",
-          message: "fetch() lỗi: " + (e && e.message ? e.message : String(e)),
+          stage: timedOut || (e && e.name === "AbortError")
+            ? "MP3_FETCH_TIMEOUT"
+            : "MP3_FETCH_FAILED",
+          message: timedOut || (e && e.name === "AbortError")
+            ? "Tải MP3 quá " + Math.round(timeoutMs / 1000) + " giây."
+            : "fetch() lỗi: " + (e && e.message ? e.message : String(e)),
         },
       };
+    })
+    .finally(function () {
+      if (timer) clearTimeout(timer);
     });
 }
 
@@ -951,19 +1103,19 @@ async function fetchMp3FromYt2mp3PageBridge(youtubeUrl, { onProgress } = {}) {
     let swResponse = null;
     let swError = null;
     try {
-      swResponse = await fetch(downloadURL, {
-        headers: { Accept: "audio/mpeg, audio/*" },
-        credentials: "omit",
-      });
-      if (swResponse && swResponse.ok) {
-        const buf = await swResponse.arrayBuffer();
-        swBlob = new Blob([buf], {
-          type: swResponse.headers.get("content-type") || "audio/mpeg",
-        });
-      }
+      const workerResult = await fetchMp3BlobInWorker(
+        downloadURL,
+        "bridge/mp3-fetch",
+        (info) => emit("bridge/mp3-download-progress", info)
+      );
+      swResponse = workerResult.response;
+      swBlob = workerResult.blob;
     } catch (e) {
       swError = e;
       console.warn("[svdmusic-bg] SW fetch MP3 threw, falling back", e);
+      emit("bridge/mp3-fetch-invalid", {
+        reason: String(e?.message || e),
+      });
     }
 
     let blob = null;
@@ -1041,7 +1193,7 @@ async function fetchMp3FromYt2mp3PageBridge(youtubeUrl, { onProgress } = {}) {
           target: { tabId, allFrames: false },
           world: "MAIN",
           func: yt2mp3FetchMain,
-          args: [{ url: downloadURL }],
+          args: [{ url: downloadURL, timeoutMs: MP3_PAGE_FETCH_TIMEOUT_MS }],
         });
         fbRaw = result;
       } catch (err) {
@@ -1245,15 +1397,14 @@ async function fetchMp3FromMp3cowPageBridge(youtubeUrl, { onProgress } = {}) {
     let swResponse = null;
     let swError = null;
     try {
-      swResponse = await fetch(downloadURL, {
-        headers: { Accept: "audio/mpeg, audio/*" },
-        credentials: "omit",
-      });
-      if (swResponse && swResponse.ok) {
-        const buf = await swResponse.arrayBuffer();
-        const fetchedBlob = new Blob([buf], {
-          type: swResponse.headers.get("content-type") || "audio/mpeg",
-        });
+      const workerResult = await fetchMp3BlobInWorker(
+        downloadURL,
+        "mp3cow/mp3-fetch",
+        (info) => emit("mp3cow/mp3-download-progress", info)
+      );
+      swResponse = workerResult.response;
+      const fetchedBlob = workerResult.blob;
+      if (fetchedBlob) {
         await validateMp3Blob({ res: swResponse, blob: fetchedBlob, stage: "mp3cow/mp3-fetch" });
         blob = fetchedBlob;
         mimeType = fetchedBlob.type || "audio/mpeg";
@@ -1282,7 +1433,7 @@ async function fetchMp3FromMp3cowPageBridge(youtubeUrl, { onProgress } = {}) {
           target: { tabId, allFrames: false },
           world: "MAIN",
           func: mp3cowFetchMain,
-          args: [{ url: downloadURL }],
+          args: [{ url: downloadURL, timeoutMs: MP3_PAGE_FETCH_TIMEOUT_MS }],
         });
         fbRaw = result;
       } catch (err) {
@@ -1722,6 +1873,10 @@ async function runMp3Job(job) {
       videoId,
       stage,
       progress: info && typeof info.progress === "number" ? info.progress : null,
+      receivedBytes:
+        info && typeof info.receivedBytes === "number" ? info.receivedBytes : null,
+      totalBytes:
+        info && typeof info.totalBytes === "number" ? info.totalBytes : null,
     });
   };
 

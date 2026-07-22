@@ -6,8 +6,8 @@
 //   2. Insert the requested prompt into Gemini's composer.
 //   3. Select model "3.1 Pro" and thinking level "Mở rộng" via text-based
 //      matching (Gemini changes its class names often).
-//   4. Submit and watch the DOM for either an .lrc attachment or inline LRC
-//      text matching the [mm:ss.xx] format.
+//   4. Submit and watch the DOM for inline raw LRC text matching the
+//      [mm:ss.xx] format. File attachments remain a compatibility fallback.
 //   5. Forward all progress + results to the background worker so the
 //      sidepanel can react.
 //
@@ -137,14 +137,14 @@
   }
 
   // ── Constants ────────────────────────────────────────────────────────────────
-  const MODEL_NEEDLE = /3\.1\s*pro|pro/i;
+  const MODEL_NEEDLE = /3\.1\s*pro/i;
   const THINKING_NEEDLE = /mở\s*rộng|deep\s*research|thinking\s*level|mức\s*độ\s*tư\s*duy/i;
   // Accepts both:
   //   [mm:ss.xx]   (mm part optional capture, falls back to mm)
   //   [hh:mm:ss.xx]
   // Group 1 = optional hh, Group 2 = mm, Group 3 = ss, Group 4 = .xx|.xxx|:xx|:xxx
   const LRC_TIME_REGEX = /\[(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2})([.:]\d{1,3})?\]/;
-  const LRC_FILE_NEEDLE = /\.lrc(\b|$)/i;
+  const FILE_TEXT_NEEDLE = /\.(?:txt|lrc)(?:\b|$)/i;
 
   // Tokens that indicate Gemini is still actively producing output. We must
   // NOT extract LRC while any of these are visible.
@@ -915,13 +915,13 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     if (!roots.length) return false;
 
     const bodyText = document.body.innerText || "";
-    const hasLrcName = /\.lrc/i.test(bodyText);
+    const hasTextFileName = FILE_TEXT_NEEDLE.test(bodyText);
     const hasViewerToolbar =
       /Tải xuống|Download|Thông tin chi tiết|Print|In|Google Drive|Drive viewer|Open with|Mở bằng|Đang hiển thị người xem/i.test(
         bodyText
       );
 
-    return hasLrcName && hasViewerToolbar;
+    return hasTextFileName && hasViewerToolbar;
   }
 
   function isVisible(el) {
@@ -2025,6 +2025,7 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
     const buttons = Array.from(document.querySelectorAll("button, [role='button']"));
     const modelTextPatterns = [
+      /3\.6\s*Flash/i,
       /3\.1\s*Pro/i,
       /3\.5\s*Flash/i,
       /Flash/i,
@@ -2154,7 +2155,7 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     // closed. Only an overlay containing menu-specific choices proves that
     // the menu is actually open.
     const menuNeedle =
-      /(?:3\.(?:1|5)\s*(?:flash|pro)|flash-lite|t\u01b0\s*duy\s*m\u1edf\s*r\u1ed9ng|deep\s*think)/i;
+      /(?:3\.(?:1|5|6)\s*(?:flash|pro)|flash-lite|t\u01b0\s*duy\s*m\u1edf\s*r\u1ed9ng|deep\s*think)/i;
     const roots = document.querySelectorAll(
       ".cdk-overlay-container, .cdk-overlay-pane, .mat-mdc-menu-panel, mat-menu-panel, [role='menu'], [role='listbox'], [role='dialog']"
     );
@@ -2381,9 +2382,9 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     }
 
     const triggerText = (btn.innerText || btn.textContent || "").trim();
-    if (/pro/i.test(triggerText)) {
-      onProgress?.("Model Pro đã được chọn.");
-      log("Model Pro đã được chọn, bỏ qua chọn lại.");
+    if (MODEL_NEEDLE.test(triggerText)) {
+      onProgress?.("Model 3.1 Pro đã được chọn.");
+      log("Model 3.1 Pro đã được chọn, bỏ qua chọn lại.");
       return;
     }
 
@@ -2393,18 +2394,18 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
     let option = null;
     for (let attempt = 0; attempt < 15; attempt += 1) {
-      const overlayMatch = pickFirstGemMenuItem(findMenuRows(/3\.1\s*pro/i));
+      const overlayMatch = pickFirstGemMenuItem(findMenuRows(MODEL_NEEDLE));
       if (overlayMatch) {
         realClickAt(overlayMatch.node, 0.5, 0.5);
         option = overlayMatch.node;
         break;
       }
-      option = clickByText(/3\.1\s*pro/i, { roleHints: ["menuitem", "option", "radio"] });
+      option = clickByText(MODEL_NEEDLE, { roleHints: ["menuitem", "option", "radio"] });
       if (option) break;
       await sleep(300);
     }
     if (!option) {
-      throw new Error("Không tìm thấy model Pro trong menu.");
+      throw new Error("Không tìm thấy model 3.1 Pro trong menu.");
     } else {
       onProgress?.("Đã chọn model 3.1 Pro.");
     }
@@ -2646,13 +2647,13 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
   function isThinkingLevelSelectedInPill(text) {
     if (!text) return false;
     const norm = text.toLowerCase();
-    // Direct "Pro Mở rộng" chip.
-    if (/pro\s*mở\s*rộng/.test(norm)) return true;
+    // Direct model + "Mở rộng" chip.
+    if (/(?:flash|pro)\s*mở\s*rộng/.test(norm)) return true;
     // Generic "Mở rộng" chip without the model prefix.
     if (/mở\s*rộng/.test(norm)) return true;
-    // Chip splits into "Pro" + separate "Mở rộng" badges joined by a
+    // Chip splits into the model + separate "Mở rộng" badges joined by a
     // newline / bullet — match both halves present.
-    if (/\bpro\b/.test(norm) && /mở\s*rộng/.test(norm)) return true;
+    if (/\b(?:flash|pro)\b/.test(norm) && /mở\s*rộng/.test(norm)) return true;
     return false;
   }
 
@@ -2692,7 +2693,32 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
   //   - custom element <file-name> with adjacent <open-button>
   //   - generic [data-test-id="file-name"] / .file-name-lr
 
-  const FILE_TEXT_NEEDLE = /\.(txt|lrc)(\?|#|$)/i;
+  function getTextFileBadge(node) {
+    const text = (node && (node.innerText || node.textContent || "")) || "";
+    const match = text.match(/\b(TXT|LRC)\b/i);
+    return match ? match[1].toLowerCase() : "";
+  }
+
+  function resolveTextFileName(rawName, chipRoot, fallbackHref = "") {
+    const candidates = [
+      rawName,
+      chipRoot?.getAttribute?.("data-file-name"),
+      chipRoot?.getAttribute?.("aria-label"),
+      chipRoot?.getAttribute?.("title"),
+      fallbackHref,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).trim());
+
+    for (const candidate of candidates) {
+      const match = candidate.match(/([^/?#\s"']+\.(?:txt|lrc))(?:\b|$)/i);
+      if (match) return match[1];
+    }
+
+    const badge = getTextFileBadge(chipRoot);
+    const visibleName = candidates[0] || "gemini-result";
+    return badge ? visibleName + "." + badge : visibleName;
+  }
 
   function findFileAttachmentIn(node) {
     if (!node) return null;
@@ -2708,21 +2734,23 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     );
     for (const anchor of anchors) {
       const href = anchor.getAttribute("href") || "";
-      const name = (
+      const rawName = (
         anchor.getAttribute("download") ||
         anchor.getAttribute("aria-label") ||
         ""
       ).trim();
-      const hrefLooksLikeText =
-        FILE_TEXT_NEEDLE.test(href) ||
-        href.startsWith("blob:");
-      const nameLooksLikeText = FILE_TEXT_NEEDLE.test(name);
-      if (!hrefLooksLikeText || !nameLooksLikeText) continue;
       const chipRoot =
         anchor.closest("file-name-lr-chip") ||
         anchor.closest(".file-name-lr-chip") ||
         anchor.closest("[class*='chip']") ||
         anchor.parentElement;
+      const hrefLooksLikeText =
+        FILE_TEXT_NEEDLE.test(href) ||
+        href.startsWith("blob:");
+      const nameLooksLikeText = FILE_TEXT_NEEDLE.test(rawName);
+      const cardHasTextBadge = !!getTextFileBadge(chipRoot);
+      if (!hrefLooksLikeText || (!nameLooksLikeText && !cardHasTextBadge)) continue;
+      const name = resolveTextFileName(rawName, chipRoot, href);
       return { anchor, href, name, chipRoot, nameEl: null };
     }
     // 2. Custom elements: <file-name>NoiTinhYeuKetThuc.txt</file-name>
@@ -2734,29 +2762,29 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     );
     for (const nameEl of nameEls) {
       const fileName = (nameEl.textContent || "").trim();
-      if (!fileName || !FILE_TEXT_NEEDLE.test(fileName)) continue;
+      if (!fileName) continue;
       const chipRoot =
         nameEl.closest("file-name-lr-chip") ||
         nameEl.closest(".file-name-lr-chip") ||
         nameEl.closest("[class*='chip']") ||
         nameEl.parentElement;
       if (!chipRoot) continue;
-      // The chip must show a "TXT" / "LRC" badge to count. Otherwise we
-      // treat it as a stray filename that happens to live in a chip.
-      const chipText = (chipRoot.innerText || chipRoot.textContent || "").toUpperCase();
-      if (!/\b(TXT|LRC)\b/.test(chipText)) continue;
+      // Gemini visually truncates long names ("Hat_Mua_Vuong...") and may
+      // omit the extension from textContent. The explicit TXT/LRC badge is
+      // therefore also accepted as the file type source.
+      if (!FILE_TEXT_NEEDLE.test(fileName) && !getTextFileBadge(chipRoot)) continue;
       const anchor =
         chipRoot.querySelector('a[download], a[href^="blob:"]') || null;
       return {
         anchor,
         href: anchor?.getAttribute("href") || "",
-        name: fileName,
+        name: resolveTextFileName(fileName, chipRoot, anchor?.getAttribute("href") || ""),
         chipRoot,
         nameEl,
       };
     }
-    // 3. Fallback: chip with explicit TXT/LRC badge whose own text
-    //    starts with a filename ending in .txt/.lrc. e.g.
+    // 3. Fallback: chip with an explicit TXT/LRC badge. The visible name may
+    //    end in .txt/.lrc or be truncated with an ellipsis, e.g.
     //    "Noi_Tinh_Yeu_Ke...\nTXT" with the chip having role="button" or
     //    similar click affordance.
     const candidateChips = node.querySelectorAll(
@@ -2764,14 +2792,20 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     );
     for (const chip of candidateChips) {
       const text = (chip.innerText || chip.textContent || "").trim();
-      if (!/\b(TXT|LRC)\b/i.test(text)) continue;
-      const m = text.match(/([\wÀ-ỹ\.\-_]+\.(txt|lrc))/i);
-      if (!m) continue;
+      if (!getTextFileBadge(chip)) continue;
+      const visibleName = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line && !/^(?:TXT|LRC|Open|Đang mở)$/i.test(line));
       const anchor = chip.querySelector('a[download], a[href^="blob:"]') || null;
       return {
         anchor,
         href: anchor?.getAttribute("href") || "",
-        name: m[1],
+        name: resolveTextFileName(
+          visibleName || "gemini-result",
+          chip,
+          anchor?.getAttribute("href") || ""
+        ),
         chipRoot: chip,
         nameEl: null,
       };
@@ -2967,7 +3001,7 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
     // 2) Click the file card's open affordance (deep query so we pierce
     //    any shadow DOM Gemini uses for its custom <open-button>).
-    onProgress?.("Đang mở file LRC từ Gemini để lấy viewer/text URL...");
+    onProgress?.("Đang mở file LRC/TXT từ Gemini để lấy viewer/text URL...");
 
     // Install the navigation guard BEFORE clicking so Gemini cannot rip the
     // tab away to drive.google.com mid-read. We tear it down as soon as the
@@ -3005,13 +3039,13 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
       }
 
       onProgress?.("Đã tìm thấy Google Drive viewer/text URL.");
-      onProgress?.("Đang đọc file LRC từ Google Drive viewer/text...");
+      onProgress?.("Đang đọc file LRC/TXT từ Google Drive viewer/text...");
 
       // 4) Fetch + parse. The fetch targets drive.google.com via XHR which
       //    is a separate connection and is not blocked by the navigation
       //    guard (we only block top-level navigation, not XHR/fetch).
       const text = await fetchDriveViewerText(viewerUrl);
-      onProgress?.("Đã đọc nội dung file LRC từ viewer/text.");
+      onProgress?.("Đã đọc nội dung file LRC/TXT từ viewer/text.");
       return text;
     } catch (err) {
       navGuardReason = "error:" + (err && err.message ? err.message.slice(0, 40) : "unknown");
@@ -3154,11 +3188,9 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
   // AFTER that snapshot.
   //
   // LRC source priority:
-  //   1. File attachment (.txt / .lrc) inside a NEW assistant node — the
-  //      expected path now that Gemini returns the LRC as a downloadable
-  //      file card.
-  //   2. Inline LRC text inside the new assistant node (fallback for
-  //      sessions where Gemini still emits raw text).
+  //   1. Stable inline raw text inside a NEW assistant node.
+  //   2. File attachment (.txt / .lrc) as a compatibility fallback when
+  //      Gemini ignores the explicit no-file instruction.
 
   const ASSISTANT_NODE_SELECTORS = [
     "[data-message-author=\"model\"]",
@@ -3215,7 +3247,49 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
   function getAssistantResponseText(node) {
     if (!node) return "";
-    return (node.innerText || node.textContent || "").trim();
+    const responseText = (node.innerText || node.textContent || "").trim();
+    if (!responseText || responseText.includes("```")) return responseText;
+
+    // Gemini renders markdown fences as DOM <pre>/<code> elements, so their
+    // literal ``` markers are absent from innerText. Reconstruct a fenced
+    // response to preserve the metadata preamble while letting the app parser
+    // save only the code-block payload as the final .lrc file.
+    let bestCodeText = "";
+    let bestTimestampCount = 0;
+    const codeCandidates = node.querySelectorAll(
+      '[data-test-id="code-content"], pre code, pre, code[role="text"]'
+    );
+    for (const candidate of codeCandidates) {
+      const codeText = (candidate.innerText || candidate.textContent || "").trim();
+      const timestampCount = countTimestampLines(codeText);
+      if (timestampCount > bestTimestampCount) {
+        bestCodeText = codeText;
+        bestTimestampCount = timestampCount;
+      }
+    }
+
+    if (bestTimestampCount < MIN_TIMESTAMP_LINES) return responseText;
+
+    const responseWithoutCode = responseText.includes(bestCodeText)
+      ? responseText.replace(bestCodeText, "")
+      : responseText;
+    const responseLines = responseWithoutCode.split(/\r?\n/);
+    const firstTimestampLine = responseLines.findIndex((line) => LRC_TIME_REGEX.test(line));
+    const preambleLines = (firstTimestampLine >= 0
+      ? responseLines.slice(0, firstTimestampLine)
+      : responseLines
+    ).filter((line) => {
+      const normalized = line.trim();
+      return normalized &&
+        !/^(?:text|plaintext|copy code|sao chép mã|tải mã xuống|hiện mã|use code with caution)$/i.test(normalized);
+    });
+
+    return [
+      preambleLines.join("\n"),
+      "```text",
+      bestCodeText,
+      "```",
+    ].filter(Boolean).join("\n");
   }
 
   function pageHasProgressToken() {
@@ -3373,28 +3447,82 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
   async function waitForResult({ cancelledRef, onProgress, snapshot }) {
     // Snapshot of assistant nodes BEFORE the prompt was sent. We only consider
-    // assistant message nodes that appear AFTER this snapshot, and within
-    // those nodes we look for an LRC FILE ATTACHMENT (.txt/.lrc).
+    // assistant message nodes that appear AFTER this snapshot.
     //
     // Order of checks each iteration:
-    //   1) Look for an attachment FIRST. If we find one, process it right
-    //      away — we don't let the "Verifying / Generating" progress token
-    //      block us because Gemini often shows those tokens for a few seconds
-    //      AFTER the file card has already rendered, and the file content
-    //      is what the user actually wants.
-    //   2) If no attachment, check progress token and wait.
-    //   3) If still nothing, wait for new assistant nodes.
+    //   1) Wait until Gemini is no longer generating/verifying.
+    //   2) Validate inline LRC and require it to remain unchanged for 7s.
+    //   3) Fall back to a text attachment only if Gemini ignored the prompt.
     const start = Date.now();
     let lastReport = 0;
     let announcedAttachment = false;
+    let lastInlineText = "";
+    let inlineStableSince = Date.now();
 
     while (!cancelledRef.current && Date.now() - start < RESPONSE_TIMEOUT_MS) {
       // 1) Look at new assistant response nodes first.
       const newNodes = nodesAfterSnapshot(snapshot);
 
-      // 2) Try to find an attachment in any new assistant node BEFORE
-      //    gating on the progress token. Gemini often paints the file
-      //    card while a stale "Generating" badge is still on screen.
+      // Never read a streaming response. A code block can already contain
+      // ten timestamps while Gemini is still appending later verses.
+      if (pageHasProgressToken()) {
+        lastInlineText = "";
+        inlineStableSince = Date.now();
+        if (Date.now() - lastReport > 3000) {
+          onProgress?.("Đang chờ Gemini hoàn tất LRC raw text...");
+          lastReport = Date.now();
+        }
+        await sleep(1000);
+        continue;
+      }
+
+      if (newNodes.length === 0) {
+        if (Date.now() - lastReport > 5000) {
+          onProgress?.("Đang chờ Gemini bắt đầu phản hồi...");
+          lastReport = Date.now();
+        }
+        await sleep(1000);
+        continue;
+      }
+
+      // Primary path: Gemini returns metadata followed by a ```text block.
+      // Keep the full response so the sidepanel can extract metadata, while
+      // its LRC parser saves only the fenced timestamp payload.
+      const inlineText = normalizeLrcText(
+        getAssistantResponseText(newNodes[newNodes.length - 1])
+      );
+      if (inlineText !== lastInlineText) {
+        lastInlineText = inlineText;
+        inlineStableSince = Date.now();
+      }
+
+      const inlineValidation = validateLrcText(inlineText);
+      if (inlineValidation.ok) {
+        const stableMs = Date.now() - inlineStableSince;
+        if (stableMs >= RESPONSE_STABLE_MS) {
+          onProgress?.(
+            "Đã nhận LRC raw text với " +
+              inlineValidation.timestampLineCount +
+              " dòng thời gian."
+          );
+          return {
+            lrcText: inlineText,
+            savedAsFile: false,
+            fileName: "",
+            timestampLineCount: inlineValidation.timestampLineCount,
+            lrcFormat: inlineValidation.format,
+          };
+        }
+        if (Date.now() - lastReport > 3000) {
+          onProgress?.("Đang kiểm tra phản hồi LRC đã ổn định...");
+          lastReport = Date.now();
+        }
+        await sleep(1000);
+        continue;
+      }
+
+      // Compatibility fallback: inspect an attachment only after the inline
+      // response is complete but does not contain valid LRC.
       let foundAttachment = null;
       if (newNodes.length > 0) {
         for (let i = newNodes.length - 1; i >= 0; i -= 1) {
@@ -3411,15 +3539,12 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
           const display = foundAttachment.name.length > 32
             ? foundAttachment.name.slice(0, 30) + "…"
             : foundAttachment.name;
-          onProgress?.("Gemini đã trả về file LRC ứng viên: " + display);
+          onProgress?.("Gemini đã trả về file LRC/TXT ứng viên: " + display);
           announcedAttachment = true;
           lastReport = Date.now();
         }
 
-        // 3) ONLY path during testing: Google Drive viewer/text. We
-        //    intentionally do NOT fall back to blob-href fetch or to the
-        //    inline preview viewer while we verify that the Drive endpoint
-        //    can deliver the full LRC content for every Gemini response.
+        // Read the attachment through Google Drive viewer/text.
         let fileText = null;
         try {
           fileText = await readGeminiFileByDriveViewer({
@@ -3470,30 +3595,10 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
         };
       }
 
-      // 5) No attachment yet. Now — and ONLY now — gate on the progress
-      //    token. We refuse to read inline assistant text because the user
-      //    explicitly asked for the file attachment path.
-      if (pageHasProgressToken()) {
-        if (Date.now() - lastReport > 3000) {
-          onProgress?.("Đang chờ Gemini tạo file LRC...");
-          lastReport = Date.now();
-        }
-        await sleep(1000);
-        continue;
-      }
-
-      if (newNodes.length === 0) {
-        if (Date.now() - lastReport > 5000) {
-          onProgress?.("Đang chờ Gemini hoàn tất phản hồi...");
-          lastReport = Date.now();
-        }
-        await sleep(1000);
-        continue;
-      }
-
-      // 6) No attachment in any of the new nodes yet. Wait.
+      // No valid inline text or attachment yet. Wait for Gemini to finish
+      // painting the response DOM.
       if (Date.now() - lastReport > 5000) {
-        onProgress?.("Đang chờ Gemini tạo file LRC...");
+        onProgress?.("Đang chờ nội dung LRC raw text hợp lệ...");
         lastReport = Date.now();
       }
       await sleep(1000);
@@ -3641,11 +3746,7 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
 
       log("MODEL_SELECTING");
       reportProgress(correlationId, { step: "selecting-model", message: "Đang chọn model 3.1 Pro..." });
-      try {
-        await selectModel({ onProgress: (m) => reportProgress(correlationId, { message: m }) });
-      } catch (error) {
-        if (!/Không tìm thấy/.test(error.message)) throw error;
-      }
+      await selectModel({ onProgress: (m) => reportProgress(correlationId, { message: m }) });
       log("MODEL_SELECTED");
       if (job.cancelled) throw new Error("Đã hủy sau khi chọn model.");
 
@@ -3739,10 +3840,9 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
           " fileName=" + (result.fileName || "") +
           " format=" + (result.lrcFormat || "?")
       );
-      // result.lrcText is the raw content of the file attachment Gemini
-      // returned. The sidepanel will run extractLrcFromGeminiOutput() on it
-      // to handle raw LRC / Python wrapper / markdown, then save as
-      // svdmusic/lrc/{videoId}.lrc — never as the original Gemini filename.
+      // result.lrcText is the full raw Gemini response for inline mode, so
+      // metadata remains available. The sidepanel extracts only the fenced
+      // LRC payload before saving svdmusic/lrc/{videoId}.lrc.
       reportLrcReady(correlationId, {
         lrcText: result.lrcText || "",
         savedAsFile: !!result.savedAsFile,

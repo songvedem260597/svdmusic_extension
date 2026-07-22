@@ -151,31 +151,21 @@ export const ALLOWED_GENRES = Object.freeze([
 export const DEFAULT_GENRE = "Nhạc Trẻ";
 
 export function buildLrcPrompt(youtubeLink, _videoId) {
-  // Verbatim prompt template — do NOT add or remove any clauses. The parser
-  // on the app side handles whatever Gemini returns (.txt, Python wrapper,
-  // markdown, garbage, raw LRC, etc.).
-  //
-  // The "Kết quả trả về là: Tên bài hát:..., Tên các ca sỹ:..., Thể loại nhạc:..."
-  // clause tells Gemini to put the song title, artist names, and a single
-  // canonical genre label in plain text alongside the .lrc file. The
-  // extension extracts them from the response (via preamble lines and/or
-  // LRC ID3 tags [ti: ...] / [ar: ...]) so the user does not have to type
-  // them. The genre must be chosen from the fixed Vietnamese list below —
-  // the parser rejects anything outside it and falls back to "Nhạc Trẻ".
-  //
   // IMPORTANT: pass the ORIGINAL youtubeLink through untouched. Do NOT
   // append `&list=RD<id>&start_radio=1` — that `list=RD` flag is YouTube's
   // "Mix — Radio" convention and biases Gemini toward a radio/mix playlist,
-  // which makes it pick the wrong song for the LRC. Metadata recovery is
-  // handled on our side via parsing [ti:], [ar:], [genre:] (or preamble),
-  // and the genre whitelist.
+  // which makes it pick the wrong song for the LRC.
   const genreList = ALLOWED_GENRES.join(", ");
-  return (
-    `Hãy tạo file .lrc từ Link:${youtubeLink}. Hãy đối chiếu đúng lời lyrics thực tế của các bài hát trong video. ` +
-    `Sửa lrc cho đúng do phụ đề có thể sẽ không đúng so với thực tế. ` +
-    `Kết quả trả về là: Tên bài hát:... , Tên các ca sỹ:.. , Thể loại nhạc:... (phải thuộc danh sách: ${genreList}) ` +
-    `và file đuôi .lrc chỉ cần bấm vào là có thể tải xuống. Không mô tả gì thêm.`
-  );
+  return [
+    `Hãy trích xuất nội dung LRC từ Link: ${youtubeLink}. Hãy đối chiếu đúng lời lyrics thực tế nghe được trong video với lời bài hát thực tế và chỉnh sửa lại thời gian/lời cho chuẩn xác do phụ đề tự động có thể bị sai.`,
+    "Yêu cầu xuất kết quả trực tiếp dưới dạng văn bản thô (raw text) trong khung code block, KHÔNG tạo file tải về hay liên kết tải xuống.",
+    "Cấu trúc kết quả trả về bắt buộc:",
+    "Tên bài hát: ...",
+    "Tên các ca sỹ: ...",
+    `Thể loại nhạc: ... (phải thuộc danh sách: ${genreList})`,
+    "Nội dung LRC raw text đặt hoàn toàn trong khung ```text ... ``` với đầy đủ mốc thời gian [mm:ss.xx] và lời bài hát.",
+    "Không mô tả hay giải thích gì thêm.",
+  ].join("\n");
 }
 
 // Detects LRC-style content inside a string.

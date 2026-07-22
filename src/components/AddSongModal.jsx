@@ -5,6 +5,7 @@ import {
   isValidYouTubeUrl,
   parseYoutubeShareUrl,
   buildLrcPrompt,
+  getThumbnailUrls,
 } from "../services/youtube.js";
 import {
   startLrcGeneration,
@@ -656,6 +657,7 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         "bridge/requesting-conversion": "Đang yêu cầu chuyển đổi MP3...",
         "bridge/link-ready": "Đã nhận link MP3 từ dịch vụ...",
         "bridge/mp3-fetch": "Đang tải file MP3 về...",
+        "bridge/mp3-download-progress": "Đang tải dữ liệu MP3...",
         "bridge/mp3-fallback": "Đang tải MP3 qua page context...",
         "bridge/mp3-fetch-invalid":
           "File MP3 trả về không hợp lệ, đang thử lại qua page context...",
@@ -666,18 +668,27 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         "mp3cow/redirect": "MP3Cow đang chuyển sang trang xử lý...",
         "mp3cow/page-api-ok": "Đã nhận link MP3 từ MP3Cow...",
         "mp3cow/mp3-fetch": "Đang tải file MP3 từ MP3Cow...",
+        "mp3cow/mp3-download-progress": "Đang tải dữ liệu MP3 từ MP3Cow...",
         "mp3cow/mp3-fetch-ok": "Đã tải xong file MP3 từ MP3Cow.",
+        "mp3cow/mp3-fetch-invalid":
+          "Tải nền không hoàn tất, đang chuyển sang tải qua tab MP3Cow...",
         "mp3cow/mp3-fallback": "Đang tải MP3 qua trang MP3Cow...",
+      };
+
+      let watchdogTimer = null;
+
+      const cleanup = () => {
+        try { chrome.runtime.onMessage.removeListener(listener); } catch (_) { /* noop */ }
+        if (watchdogTimer) {
+          clearTimeout(watchdogTimer);
+          watchdogTimer = null;
+        }
       };
 
       const finalize = (result) => {
         if (mp3CleanupRef.current === cleanup) mp3CleanupRef.current = null;
         cleanup();
         resolve(result);
-      };
-
-      const cleanup = () => {
-        try { chrome.runtime.onMessage.removeListener(listener); } catch (_) { /* noop */ }
       };
 
       // base64 → Uint8Array. Chrome's structured-clone drops ArrayBuffer
@@ -702,6 +713,27 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         if (message.type === "mp3/progress") {
           const stage = message.stage || "progress";
           const baseText = stageText[stage] || `(${stage})`;
+          if (stage === "bridge/mp3-download-progress" || stage === "mp3cow/mp3-download-progress") {
+            const receivedMb =
+              typeof message.receivedBytes === "number"
+                ? (message.receivedBytes / (1024 * 1024)).toFixed(1)
+                : null;
+            const totalMb =
+              typeof message.totalBytes === "number" && message.totalBytes > 0
+                ? (message.totalBytes / (1024 * 1024)).toFixed(1)
+                : null;
+            const percent =
+              typeof message.progress === "number"
+                ? Math.min(100, Math.round(message.progress))
+                : null;
+            const detail = receivedMb == null
+              ? ""
+              : totalMb
+                ? ` ${receivedMb}/${totalMb} MB${percent == null ? "" : ` (${percent}%)`}`
+                : ` ${receivedMb} MB`;
+            appendLog(baseText + detail);
+            return;
+          }
           if (stage === "bridge/mp3-fetch-invalid" && message && typeof message === "object") {
             const diag = [];
             if (message.status != null) diag.push(`status=${message.status}`);
@@ -896,6 +928,19 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
 
       mp3CleanupRef.current = cleanup;
       chrome.runtime.onMessage.addListener(listener);
+
+      // Last-resort UI watchdog. Individual transports have shorter timeouts,
+      // but this also protects the modal if a future provider stage forgets to
+      // emit a terminal result/error event.
+      watchdogTimer = setTimeout(() => {
+        appendLog("Lỗi MP3: tiến trình tải đã quá 5 phút và được dừng để tránh treo.");
+        finalize({
+          ok: false,
+          code: "timeout",
+          httpStatus: null,
+          message: "Timeout tải MP3 sau 5 phút.",
+        });
+      }, 5 * 60 * 1000);
 
       startMp3Job({
         correlationId,
@@ -1166,7 +1211,7 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
       return;
     }
 
-    appendLog("Đã nhận file attachment từ Gemini.");
+    appendLog("Đã nhận LRC raw text từ Gemini.");
 
     // LRC is now parsed in-memory only — we wait for the MP3 result before
     // committing anything to IndexedDB. If MP3 fails the helper at the
@@ -1704,7 +1749,7 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         return;
       }
 
-      appendLog("Đã nhận file attachment từ Gemini.");
+      appendLog("Đã nhận LRC raw text từ Gemini.");
       const lrcInfo = prepareLrcInfo(videoId, lrcRaw);
       if (!lrcInfo) {
         fail(
@@ -2128,17 +2173,6 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
 }
 
 export { STEPS as ADD_SONG_STEPS };
-
-// Local helper: avoids circular import from geminiLrc by re-implementing the
-// YouTube thumbnail URL builder here. Kept tiny and pure.
-function getThumbnailUrls(videoId) {
-  if (!videoId) return [];
-  return [
-    "https://i.ytimg.com/vi/" + videoId + "/hqdefault.jpg",
-    "https://i.ytimg.com/vi/" + videoId + "/mqdefault.jpg",
-    "https://i.ytimg.com/vi/" + videoId + "/sddefault.jpg",
-  ];
-}
 
 // Fetches the first reachable YouTube thumbnail as a Blob. Returns null when
 // every variant 404s / errors out. We verify via HEAD first to skip the

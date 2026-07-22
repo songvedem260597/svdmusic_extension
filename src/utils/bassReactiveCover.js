@@ -29,7 +29,7 @@ const ANALYSER_SMOOTHING = 0.62;
 
 let bassAudioCtx = null;
 let bassAnalyser = null;
-const bassSourceByAudio = new WeakMap();
+let bassSourceByAudio = new WeakMap();
 let bassDataArray = null;
 let bassRafId = null;
 
@@ -367,7 +367,10 @@ export function disposeBassReactiveCover() {
   try { bassAudioCtx && bassAudioCtx.close(); } catch (_) {}
   bassAudioCtx = null;
 
-  bassSourceByAudio.clear();
+  // WeakMap intentionally has no `.clear()` API. Replacing the map releases
+  // the old audio-node associations and keeps React Strict Mode cleanup from
+  // crashing the development preview during its mount/unmount verification.
+  bassSourceByAudio = new WeakMap();
   bassDiscWrap = null;
   discPulseSmooth = 0;
   discRotateAngle = 0;

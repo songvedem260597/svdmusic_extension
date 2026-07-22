@@ -4295,8 +4295,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 /* Light mode — recolor hardcoded theme components that were authored for dark. */
-.theme-light .appShell,
-.theme-light body {
+.appShell.theme-light {
   color: var(--text-main);
   background-color: var(--bg-main);
 }
@@ -4901,11 +4900,11 @@ input[type="range"]::-webkit-slider-thumb {
    non-custom ambient uses, but drive its alpha with the same slider
    variables. The dark-theme default above (rgba(7, 11, 22, ...)) is
    overridden for .appShell.homeView when the light theme is active. */
-.theme-light .appShell.homeView.hasCustomBg .ambientBgShade {
+.appShell.theme-light.homeView.hasCustomBg .ambientBgShade {
   background: rgba(255, 255, 255, var(--custom-bg-shade-opacity, 0.42));
 }
 
-.theme-light .appShell.homeView.hasCustomBg .ambientBg::after {
+.appShell.theme-light.homeView.hasCustomBg .ambientBg::after {
   background:
     linear-gradient(
       180deg,
@@ -5079,7 +5078,7 @@ input[type="range"]::-webkit-slider-thumb {
    The default look (no custom image picked) is preserved by the gradient
    on .ambientBg::after and the body's own background. */
 .appShell,
-.theme-light .appShell,
+.appShell.theme-light,
 .lyricsPanel {
   background: transparent;
   background-color: transparent;
@@ -6119,4 +6118,1466 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   height: 100%;
+}
+
+/* =====================================================================
+   UI consistency audit — spacing, typography, controls and responsive UI
+   ---------------------------------------------------------------------
+   This final layer intentionally centralises the visual contract without
+   rewriting the legacy layout rules above. Keep shared control sizes,
+   radii and theme surfaces here so new components inherit one system.
+   ===================================================================== */
+
+:root {
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-control-height: 40px;
+  --ui-control-height-compact: 36px;
+  --ui-radius-control: 10px;
+  --ui-radius-card: 14px;
+  --ui-radius-overlay: 16px;
+  --ui-border: rgba(255, 255, 255, 0.1);
+  --ui-border-strong: rgba(255, 255, 255, 0.16);
+  --ui-surface: rgba(16, 26, 43, 0.96);
+  --ui-surface-raised: rgba(20, 32, 51, 0.98);
+  --ui-muted: rgba(236, 240, 246, 0.66);
+  --ui-focus: 0 0 0 3px rgba(0, 255, 179, 0.2);
+  --ui-player-height: clamp(68px, 9vh, 88px);
+}
+
+:root[data-theme="light"] {
+  --ui-border: rgba(15, 23, 42, 0.12);
+  --ui-border-strong: rgba(15, 23, 42, 0.2);
+  --ui-surface: rgba(255, 255, 255, 0.98);
+  --ui-surface-raised: #ffffff;
+  --ui-muted: rgba(15, 23, 42, 0.62);
+  --ui-focus: 0 0 0 3px rgba(0, 122, 85, 0.18);
+}
+
+body {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input {
+  letter-spacing: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible,
+[role="radio"]:focus-visible {
+  outline: 2px solid var(--green-color);
+  outline-offset: 2px;
+}
+
+/* Header controls share one footprint and one visual language. */
+.topBar {
+  min-height: 56px;
+}
+
+.searchBox,
+.topBadge,
+.topBadgeButton {
+  height: var(--ui-control-height);
+  border-radius: var(--ui-radius-control);
+}
+
+.searchBox {
+  opacity: 1;
+}
+
+.searchBox input,
+.songLibrarySearchInput,
+.modalField input {
+  font-weight: 400;
+}
+
+.topBadgeButton,
+.modalButton {
+  font-weight: 500;
+}
+
+.topBadgeButton:active,
+.modalButton:active {
+  transform: translateY(1px);
+}
+
+.searchClear,
+.modalClose,
+.songLibraryClose {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Cards and list rows use two deliberate radius levels. */
+.nowPlaying,
+.songListPanel,
+.weatherWidget {
+  border-color: var(--ui-border);
+  border-radius: var(--ui-radius-card);
+}
+
+.songRow,
+.searchResult,
+.songLibraryRow,
+.songContextMenuItem,
+.modalStatus,
+.modalLrcFolder,
+.modalLrcWarning {
+  border-radius: var(--ui-radius-control);
+}
+
+.rowCover,
+.miniCover,
+.miniSongPlaceholder,
+.coverStack {
+  border-radius: var(--ui-radius-control);
+}
+
+.tagRow span,
+.songTag,
+.searchTag,
+.songLibraryRowTag,
+.repeatBadge {
+  border-radius: 999px;
+}
+
+.sectionTitle {
+  margin-bottom: var(--ui-space-4);
+}
+
+.sectionTitle h2 {
+  font-size: clamp(1.05rem, 0.6vw + 0.8rem, 1.3rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.songMeta strong,
+.miniSong strong,
+.songLibraryRowMain strong {
+  font-weight: 500;
+}
+
+.artistName,
+.liveLyric,
+.typingText,
+.settingsHint,
+.modalField > span {
+  font-weight: 400;
+}
+
+.emptyPlayer {
+  gap: var(--ui-space-4);
+  padding: clamp(32px, 6vw, 72px) clamp(20px, 4vw, 48px);
+}
+
+.emptyPlayer h1 {
+  font-size: clamp(1.55rem, 2.2vw, 2.4rem);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+}
+
+/* Reserve real space for the fixed player instead of letting it cover the
+   last song rows. The variable changes with the compact layouts below. */
+.pageGrid {
+  padding-bottom: calc(var(--ui-player-height) + var(--ui-space-3));
+}
+
+.pageGrid.view-list {
+  gap: clamp(12px, 1vw, 16px);
+  padding-inline: clamp(20px, 3vw, 56px);
+}
+
+.pageGrid.view-list .nowPlaying,
+.pageGrid.view-list .songListPanel {
+  margin-inline: 0;
+  padding: clamp(16px, 1.5vw, 24px);
+}
+
+.playerBar {
+  height: var(--ui-player-height);
+  border-top-width: 1px;
+}
+
+.playerButtons button,
+.playerRight button,
+.volumeToggle {
+  min-width: 36px;
+  min-height: 36px;
+  border-radius: var(--ui-radius-control);
+}
+
+.playerButtons .miniPlayButton {
+  width: 48px;
+  height: 48px;
+}
+
+.playerButtons .miniPlayButton::before {
+  width: 48px;
+  height: 48px;
+}
+
+/* Dialogs, popovers and menus use the same surface, border and elevation. */
+.modalCard,
+.songLibraryPopover,
+.songContextMenu {
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-overlay);
+  background: var(--ui-surface);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+}
+
+.modalHeader,
+.modalFooter {
+  padding-inline: var(--ui-space-5);
+}
+
+.modalHeader {
+  min-height: 60px;
+}
+
+.modalBody {
+  gap: var(--ui-space-4);
+  padding: var(--ui-space-5);
+}
+
+.modalFooter {
+  min-height: 64px;
+  align-items: center;
+}
+
+.modalClose {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--ui-radius-control);
+}
+
+.modalField {
+  gap: var(--ui-space-2);
+}
+
+.modalField input {
+  height: 44px;
+  border-radius: var(--ui-radius-control);
+}
+
+.modalButton {
+  min-height: var(--ui-control-height);
+  border-radius: var(--ui-radius-control);
+}
+
+.settingsSection,
+.settingsThemeOption,
+.settingsBackgroundPreview,
+.settingsBackgroundItem,
+.settingsToggleRow {
+  border-radius: var(--ui-radius-card);
+}
+
+.settingsThemeOption {
+  min-height: 64px;
+}
+
+.songLibraryPopover {
+  width: min(380px, calc(100vw - 24px));
+}
+
+.songLibraryHeader {
+  min-height: 52px;
+  padding: 10px 14px;
+}
+
+.songLibrarySearch {
+  height: var(--ui-control-height);
+  margin: 10px 12px 0;
+  border-radius: var(--ui-radius-control);
+}
+
+.songLibraryClose {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ui-radius-control);
+}
+
+.songLibraryRow {
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.songContextMenu {
+  padding: var(--ui-space-2);
+}
+
+.songContextMenuItem {
+  min-height: 40px;
+  padding-inline: var(--ui-space-3);
+}
+
+/* Light mode needs full background overrides. A background-color alone
+   cannot replace the dark gradients declared by the legacy components. */
+.theme-light .modalCard,
+.theme-light .songLibraryPopover,
+.theme-light .songContextMenu,
+.theme-light .searchResults {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: var(--ui-border-strong);
+  color: #0f172a;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.18);
+}
+
+.theme-light .modalHeader,
+.theme-light .modalFooter,
+.theme-light .songLibraryHeader,
+.theme-light .songLibraryGroup + .songLibraryGroup {
+  border-color: var(--ui-border);
+}
+
+.theme-light .settingsSection,
+.theme-light .settingsToggleRow {
+  background: #f6f8fb;
+  border-color: var(--ui-border);
+}
+
+.theme-light .settingsThemeOption {
+  background: #ffffff;
+  border-color: var(--ui-border);
+  color: #0f172a;
+}
+
+.theme-light .settingsThemeOption:hover,
+.theme-light .settingsThemeOption.isActive {
+  background: #e9f8f2;
+  border-color: #008a61;
+}
+
+.theme-light .settingsHint,
+.theme-light .settingsThemeLabel small,
+.theme-light .modalField > span,
+.theme-light .songLibraryCount,
+.theme-light .songLibraryEmpty,
+.theme-light .songLibraryRowMain small,
+.theme-light .songLibraryGroupHeader {
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.theme-light .settingsBackgroundPreview {
+  background: #eef2f6;
+  border-color: var(--ui-border-strong);
+}
+
+.theme-light .settingsBackgroundEmpty {
+  color: rgba(15, 23, 42, 0.62);
+}
+
+.theme-light .modalButton.ghost {
+  background: #ffffff;
+  border-color: var(--ui-border-strong);
+  color: #334155;
+}
+
+.theme-light .modalButton.primary {
+  background: #e1f6ee;
+  border-color: #008a61;
+  color: #006747;
+}
+
+.theme-light .modalStatus {
+  background: #e9f8f2;
+  border-color: rgba(0, 122, 85, 0.28);
+  color: #006747;
+}
+
+.theme-light .songLibrarySearch,
+.theme-light .songLibraryRow:hover {
+  background: #f1f5f9;
+}
+
+.theme-light .songContextMenuItem {
+  color: #1e293b;
+}
+
+.theme-light .songContextMenuNote {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.theme-light .weatherWidget {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--ui-border);
+}
+
+.theme-light .typingText {
+  color: rgba(15, 23, 42, 0.82);
+}
+
+.theme-light .brand {
+  padding: 2px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: var(--ui-radius-control);
+  background: rgba(11, 18, 32, 0.94);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+}
+
+.theme-light .searchBox input::placeholder {
+  color: rgba(15, 23, 42, 0.48);
+}
+
+.theme-light .emptyPlayer h1 {
+  color: #0f172a;
+  opacity: 0.92;
+}
+
+.theme-light .emptyPlayer .emptyPlayerIcon {
+  color: #008a61;
+  opacity: 0.82;
+}
+
+.theme-light .artistName,
+.theme-light .liveLyric,
+.theme-light .miniSongEmpty span:last-child {
+  color: #64748b;
+}
+
+.theme-light .miniSongPlaceholder {
+  border-color: rgba(15, 23, 42, 0.16);
+  background: rgba(15, 23, 42, 0.04);
+  color: #008a61;
+}
+
+/* Tablet: keep the full player in one compact row and collapse header
+   labels to icons so search remains useful instead of becoming a sliver. */
+@media (max-width: 900px) {
+  .topBar {
+    grid-template-columns: minmax(96px, 112px) minmax(0, 1fr) auto;
+    padding-inline: 12px;
+    gap: var(--ui-space-2);
+  }
+
+  .topBarActions {
+    gap: 6px;
+  }
+
+  .topBarActions .topBadgeButton {
+    width: var(--ui-control-height);
+    min-width: var(--ui-control-height);
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .topBarActions .topBadgeButton span {
+    display: none;
+  }
+
+  .topBarActions .topBadgeButton svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .pageGrid.view-list {
+    gap: 12px;
+    padding-inline: clamp(12px, 2vw, 18px);
+  }
+
+  .pageGrid.view-list .nowPlaying,
+  .pageGrid.view-list .songListPanel {
+    padding: clamp(12px, 2vw, 18px);
+  }
+}
+
+@media (min-width: 1100px) {
+  .pageGrid.view-list .nowPlaying {
+    flex: 0 1 42%;
+  }
+
+  .pageGrid.view-list .songListPanel {
+    flex: 1 1 58%;
+  }
+}
+
+@media (min-width: 1800px) {
+  .pageGrid.view-list .nowPlaying {
+    flex-basis: 40%;
+  }
+
+  .pageGrid.view-list .songListPanel {
+    flex-basis: 60%;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1024px) {
+  :root {
+    --ui-player-height: 80px;
+  }
+
+  .miniSong {
+    display: grid;
+    padding-left: 8px;
+  }
+
+  .playerBar {
+    grid-template-columns: minmax(180px, 0.9fr) minmax(0, 2fr) auto;
+    grid-template-rows: 1fr;
+    align-items: center;
+    justify-items: stretch;
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .playerCenter {
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-columns: 128px minmax(0, 1fr);
+    width: 100%;
+    padding: 0;
+    gap: 8px;
+  }
+
+  .playerButtons {
+    gap: 10px;
+  }
+
+  .playerButtons button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .playerButtons .miniPlayButton,
+  .playerButtons .miniPlayButton::before {
+    width: 44px;
+    height: 44px;
+  }
+
+  .seekRow {
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+  }
+
+  .playerRight {
+    position: static;
+    inset: auto;
+    display: flex;
+    width: auto;
+    height: 100%;
+    gap: 4px;
+    padding: 0;
+    pointer-events: auto;
+  }
+
+  .playerBar .shuffleButton,
+  .playerBar .repeatButton {
+    position: static;
+    inset: auto;
+    width: 40px;
+    height: 40px;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .volumeControl {
+    display: none;
+  }
+}
+
+/* Narrow side panel: two-row header gives the search field a full row.
+   Four 36px icon controls still fit at 280px without clipping. */
+@media (max-width: 560px) {
+  :root {
+    --ui-player-height: clamp(104px, 15dvh, 120px);
+  }
+
+  .topBar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 40px 40px;
+    height: 96px;
+    min-height: 96px;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    height: 40px;
+  }
+
+  .brand img {
+    width: 132px;
+  }
+
+  .topBarActions {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    order: initial;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .topBarActions .topBadgeButton {
+    width: var(--ui-control-height-compact);
+    min-width: var(--ui-control-height-compact);
+    height: var(--ui-control-height-compact);
+  }
+
+  .searchWrap {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    order: initial;
+  }
+
+  .searchBox,
+  .searchBox input {
+    height: var(--ui-control-height);
+  }
+
+  .searchBox input {
+    font-size: 0.82rem;
+  }
+
+  .searchClear {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+
+  .pageGrid {
+    padding-bottom: calc(var(--ui-player-height) + var(--ui-space-3));
+  }
+
+  .pageGrid.view-list,
+  .pageGrid.view-lyrics {
+    gap: 8px;
+    padding-right: 10px;
+    padding-bottom: calc(var(--ui-player-height) + var(--ui-space-3));
+    padding-left: 10px;
+  }
+
+  .pageGrid.view-list .nowPlaying,
+  .pageGrid.view-list .songListPanel {
+    margin-inline: 0;
+    padding: 10px;
+  }
+
+  .pageGrid.view-lyrics .lyricsPanel {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
+  .pageGrid.view-lyrics .lyricsStage {
+    height: 100%;
+  }
+
+  .playerBar {
+    height: var(--ui-player-height);
+    padding: 10px 12px;
+  }
+
+  .playerButtons button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .playerButtons .miniPlayButton,
+  .playerButtons .miniPlayButton::before {
+    width: 44px;
+    height: 44px;
+  }
+
+  .modalOverlay {
+    padding: 8px;
+  }
+
+  .modalCard {
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--ui-radius-card);
+  }
+
+  .modalHeader {
+    min-height: 56px;
+    padding-inline: 14px;
+  }
+
+  .modalBody {
+    padding: 14px;
+  }
+
+  .modalFooter {
+    min-height: 60px;
+    padding-inline: 14px;
+  }
+
+  .modalFieldRow,
+  .settingsThemeRow {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsBackgroundPreview {
+    height: 150px;
+  }
+
+  .songLibraryPopover {
+    position: fixed;
+    top: 104px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-height: calc(100dvh - 104px - var(--ui-player-height) - 8px);
+  }
+
+  .emptyPlayer {
+    padding: 28px 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .brand img {
+    width: 124px;
+  }
+
+  .topBarActions {
+    gap: 5px;
+  }
+
+  .topBarActions .topBadgeButton {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+  }
+
+  .nowPlaying,
+  .songListPanel {
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 320px) {
+  .topBar {
+    height: 94px;
+    min-height: 94px;
+    padding-inline: 8px;
+  }
+
+  .brand img {
+    width: 116px;
+  }
+
+  .topBarActions .topBadgeButton {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+  }
+
+  /* Explicitly undo the legacy 56px player rule which clipped the seek row. */
+  .playerBar {
+    height: var(--ui-player-height);
+  }
+}
+
+@media (max-width: 720px) and (max-height: 480px) and (orientation: landscape) {
+  :root {
+    --ui-player-height: 92px;
+  }
+
+  .topBar {
+    grid-template-columns: 84px minmax(0, 1fr) auto;
+    grid-template-rows: 44px;
+    height: 52px;
+    min-height: 52px;
+    padding-block: 4px;
+  }
+
+  .brand,
+  .searchWrap,
+  .topBarActions {
+    grid-row: 1;
+  }
+
+  .searchWrap {
+    grid-column: 2;
+  }
+
+  .topBarActions {
+    grid-column: 3;
+  }
+}
+
+/* The large now-playing artwork can come from a square YouTube thumbnail
+   whose black letterbox bars are already baked into the pixels. `object-fit`
+   cannot remove those internal bars, so crop the media layers inside the
+   existing responsive square. Individual `scale` composes with the glitch
+   animations' `transform`, preserving their small translations. */
+.coverStack {
+  --cover-media-zoom: 1;
+}
+
+.coverStack.hasLetterboxArtwork {
+  --cover-media-zoom: 1.34;
+}
+
+.coverStack.hasLetterboxArtwork > .coverBase,
+.coverStack.hasLetterboxArtwork > .coverRed,
+.coverStack.hasLetterboxArtwork > .coverCyan,
+.coverStack.hasLetterboxArtwork .coverBand img {
+  scale: var(--cover-media-zoom);
+  transform-origin: center;
+}
+
+/* coverGlow already has transform: scale(.9); compensate so its final crop
+   matches the other media layers and no dark band bleeds through the blur. */
+.coverStack.hasLetterboxArtwork > .coverGlow {
+  scale: 1.49;
+  transform-origin: center;
+}
+
+/* =====================================================================
+   Header identity, search focus and transport geometry
+   ---------------------------------------------------------------------
+   The old bitmap logo contained large transparent margins and white text,
+   forcing light mode to place it on a dark patch. The vector mark below is
+   theme-aware, stays crisp at every size and needs no artificial backdrop.
+   ===================================================================== */
+
+.brand {
+  --brand-ink: #f8fafc;
+  --brand-accent: #00e7a5;
+  --brand-mark-fill: rgba(0, 231, 165, 0.12);
+  --brand-mark-border: rgba(0, 255, 179, 0.34);
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  height: 40px;
+  align-items: center;
+  justify-self: start;
+  gap: clamp(6px, 0.6vw, 9px);
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--brand-ink);
+  line-height: 1;
+  text-decoration: none;
+}
+
+.theme-light .brand {
+  --brand-ink: #102033;
+  --brand-accent: #007a55;
+  --brand-mark-fill: #e6f8f1;
+  --brand-mark-border: rgba(0, 122, 85, 0.22);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.brand:focus,
+.brand:focus-visible {
+  outline: none;
+}
+
+.brandMark {
+  display: block;
+  width: clamp(28px, 8.5vw, 38px);
+  height: auto;
+  flex: 0 0 auto;
+  aspect-ratio: 1;
+  filter: drop-shadow(0 5px 12px rgba(0, 231, 165, 0.14));
+}
+
+.brandMarkTile {
+  fill: var(--brand-mark-fill);
+  stroke: var(--brand-mark-border);
+  stroke-width: 1.5;
+}
+
+.brandMarkWave {
+  fill: none;
+  stroke: var(--brand-accent);
+  stroke-width: 3.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brandMarkDot {
+  fill: var(--brand-accent);
+}
+
+.brandWordmark {
+  display: inline-flex;
+  min-width: 0;
+  align-items: baseline;
+  font-size: clamp(0.95rem, 4.4vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  white-space: nowrap;
+}
+
+.brandInitials {
+  color: var(--brand-ink);
+  font-weight: 750;
+}
+
+.brandMusic {
+  color: var(--brand-accent);
+  font-weight: 650;
+}
+
+@media (max-width: 900px) {
+  .brandMark {
+    width: clamp(24px, 7.5vw, 32px);
+  }
+
+  .brandWordmark {
+    font-size: clamp(0.82rem, 3.8vw, 1rem);
+  }
+}
+
+/* The input itself never draws a browser outline. Focus is communicated by
+   the search container's border colour, without a second perimeter ring. */
+.searchBox,
+.searchBox:focus,
+.searchBox:focus-within,
+.searchBox.isFocused {
+  outline: none;
+}
+
+.searchBox.isFocused {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+}
+
+.searchBox {
+  gap: 10px;
+  padding-inline: 12px 10px;
+}
+
+.searchBox > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.searchBox input {
+  padding: 0;
+  line-height: 1.4;
+}
+
+.searchBox input:focus,
+.searchBox input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.theme-light .searchBox.isFocused {
+  border-color: rgba(0, 122, 85, 0.38);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.09);
+}
+
+/* Never let the transport row compress the play control into an oval. */
+.playerButtons button {
+  flex: 0 0 auto;
+}
+
+.playerButtons .miniPlayButton {
+  box-sizing: border-box;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  padding: 0;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  transform: none;
+}
+
+.playerButtons .miniPlayButton::before {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+}
+
+.playerButtons .miniPlayButton svg {
+  display: block;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1024px) {
+  .playerButtons .miniPlayButton {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    flex-basis: 44px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topBar {
+    height: 108px;
+    min-height: 108px;
+    padding-block: 8px 12px;
+  }
+
+  .searchBox {
+    gap: 9px;
+    padding-inline: 12px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .searchBox {
+    gap: 8px;
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 720px) and (max-height: 480px) and (orientation: landscape) {
+  .topBar {
+    height: 52px;
+    min-height: 52px;
+    padding-block: 4px;
+  }
+
+  .brandMark {
+    width: clamp(26px, 8vh, 32px);
+  }
+
+  .brandWordmark {
+    font-size: clamp(0.85rem, 4vh, 1rem);
+  }
+
+  .brandMusic {
+    display: none;
+  }
+}
+
+/* Final input focus reset. Keep component/container focus borders, but never
+   let the browser draw a rectangular focus ring directly on an input. */
+input,
+input:focus,
+input:focus-visible {
+  outline: none !important;
+  outline-width: 0 !important;
+  outline-offset: 0 !important;
+  -webkit-focus-ring-color: transparent;
+}
+
+/* =====================================================================
+   Light-mode contrast pass
+   ---------------------------------------------------------------------
+   The neon mint and translucent white surfaces used by dark mode lose
+   definition on a pale canvas. This final layer gives light mode its own
+   accessible accent, stronger surface hierarchy and readable transport
+   controls while preserving the layout and spacing system above.
+   ===================================================================== */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-main: #edf1f5;
+  --bg-index: #edf1f5;
+  --bg-card: #ffffff;
+  --bg-color: #cbd5df;
+  --card-tint: #f3f7f6;
+  --text-main: #111827;
+  --text-muted: #526173;
+  --gray-color: #5c6b7d;
+  --green-color: #007a55;
+  --green-btn-color: #007a55;
+  --light-blue-color: #008f7a;
+  --yellow-color: #806b00;
+  --border-color: #d2dae3;
+  --ui-border: #d7dee6;
+  --ui-border-strong: #c5cfda;
+  --ui-muted: #526173;
+  --ui-surface: #ffffff;
+  --ui-surface-raised: #ffffff;
+}
+
+html[data-theme="light"],
+html[data-theme="light"] body {
+  background: #edf1f5;
+}
+
+.appShell.theme-light {
+  isolation: isolate;
+  background: transparent;
+  background-color: transparent;
+}
+
+.theme-light .ambientBg::after {
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.14), rgba(237, 241, 245, 0.5)),
+    linear-gradient(90deg, rgba(237, 241, 245, 0.28), rgba(244, 247, 249, 0.18));
+}
+
+.theme-light .ambientBg > img:not(.ambientBgCustom) {
+  opacity: 0.55;
+  filter: blur(32px) saturate(0.9) contrast(1.06);
+  transform: scale(1.08);
+}
+
+.theme-light .ambientBgShade {
+  background: rgba(241, 245, 249, 0.2);
+}
+
+.theme-light .topBar {
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.theme-light .searchBox,
+.theme-light .topBadge,
+.theme-light .topBadgeButton {
+  border-color: #d1d9e2;
+  background: #ffffff;
+  color: #263244;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.07);
+}
+
+.theme-light .searchBox {
+  background: #ffffff;
+}
+
+.theme-light .searchBox > svg,
+.theme-light .searchBox input::placeholder {
+  color: #667487;
+}
+
+.theme-light .topBadgeButton:hover {
+  border-color: rgba(0, 122, 85, 0.34);
+  background: #eef8f4;
+  color: #006747;
+}
+
+.theme-light .nowPlaying,
+.theme-light .songListPanel {
+  border-color: #cfd8e2;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 14px 36px rgba(15, 23, 42, 0.055);
+  -webkit-backdrop-filter: blur(18px) saturate(1.06);
+  backdrop-filter: blur(18px) saturate(1.06);
+}
+
+.appShell.theme-light.homeView.hasCustomBg .nowPlaying,
+.appShell.theme-light.homeView.hasCustomBg .songListPanel {
+  background: rgba(255, 255, 255, 0.62);
+  -webkit-backdrop-filter: blur(6px) saturate(1.04);
+  backdrop-filter: blur(6px) saturate(1.04);
+}
+
+.theme-light .sectionTitle h2,
+.theme-light .songHero h3,
+.theme-light .weatherTemp,
+.theme-light .miniSong strong {
+  color: #111827;
+}
+
+.theme-light .artistName,
+.theme-light .liveLyric,
+.theme-light .weatherLocation,
+.theme-light .weatherMeta,
+.theme-light .typingText,
+.theme-light .miniSong span,
+.theme-light .songMeta small {
+  color: #526173;
+}
+
+.theme-light .eyebrow,
+.theme-light .sectionTitle {
+  color: #007a55;
+}
+
+.theme-light .tagRow span,
+.theme-light .songTag,
+.theme-light .searchTag {
+  border-color: rgba(0, 122, 85, 0.28);
+  background: #eaf7f2;
+  color: #006b4a;
+}
+
+.theme-light .songRow {
+  border: 1px solid transparent;
+  background: #f5f8f7;
+  color: #526173;
+  opacity: 1;
+}
+
+.theme-light .songRow:hover {
+  border-color: #cddbd6;
+  background: #edf6f2;
+  opacity: 1;
+}
+
+.theme-light .songRow.isActive {
+  border-color: rgba(0, 122, 85, 0.24);
+  background: #e6f4ef;
+  box-shadow: inset 3px 0 0 #007a55;
+  opacity: 1;
+}
+
+.theme-light .songRow:hover .songMeta strong,
+.theme-light .songRow.isActive .songMeta strong {
+  color: #006b4a;
+}
+
+.theme-light .rowIndex {
+  color: #7a6500;
+  font-weight: 600;
+}
+
+.theme-light .weatherWidget {
+  border-color: #d5dde6;
+  background: #f7f9fb;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.theme-light .nowPlayingBottom {
+  border-top-color: #e0e6ec;
+}
+
+.theme-light .playerBar {
+  border-top-color: #c9d3dd;
+  background: rgba(255, 255, 255, 0.92);
+  background-image: none;
+  box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.08);
+  color: #263244;
+  -webkit-backdrop-filter: blur(18px) saturate(1.06);
+  backdrop-filter: blur(18px) saturate(1.06);
+}
+
+.theme-light .playerButtons button,
+.theme-light .playerRight button,
+.theme-light .playerRight,
+.theme-light .seekRow,
+.theme-light .volumeControl,
+.theme-light .volumeToggle {
+  color: #5b6879;
+}
+
+.theme-light .playerButtons button:hover,
+.theme-light .playerRight button:hover,
+.theme-light .volumeToggle:hover,
+.theme-light .playerRight .isToggled {
+  color: #007a55;
+}
+
+.theme-light .playerButtons .miniPlayButton {
+  border: 1px solid #006f4e;
+  background: #007a55;
+  color: #ffffff;
+  box-shadow: 0 8px 22px rgba(0, 122, 85, 0.24);
+}
+
+.theme-light .playerButtons .miniPlayButton:hover {
+  background: #006b4a;
+  color: #ffffff;
+}
+
+.theme-light .playerButtons .miniPlayButton svg,
+.theme-light .playerButtons .miniPlayButton .lucide-play polygon {
+  color: #ffffff;
+  fill: currentColor;
+  stroke: #ffffff;
+}
+
+.theme-light .playerButtons .miniPlayButton::before {
+  background: rgba(0, 122, 85, 0.18);
+}
+
+.theme-light input[type="range"] {
+  background:
+    linear-gradient(90deg, #008f7a var(--progress), #c5cfda 0);
+}
+
+.theme-light input[type="range"]::-webkit-slider-thumb {
+  background-color: #008f7a;
+  box-shadow: rgba(0, 143, 122, 0.18) 0 0 0 6px;
+}
+
+.theme-light .playerButtons button:disabled,
+.theme-light .playerRight button:disabled {
+  color: #a4afbb;
+  opacity: 0.82;
+}
+
+/* Light lyrics view: retain the song artwork as atmosphere instead of
+   bleaching the entire stage white. The lyrics sit on a restrained glass
+   surface, giving the five-line window a clear focal area on wide displays. */
+.theme-light .pageGrid.view-lyrics .lyricsPanel {
+  border: 1px solid #cbd5df;
+  border-radius: 24px;
+  background: #e6edf3;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 18px 46px rgba(15, 23, 42, 0.08);
+}
+
+.theme-light .lyricsBgImage {
+  opacity: 0.34;
+  filter: blur(48px) saturate(0.82) contrast(1.08);
+  transform: scale(1.28);
+}
+
+.theme-light .lyricsBgShade {
+  background:
+    radial-gradient(
+      circle at 20% 52%,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(230, 237, 243, 0.34) 38%,
+      rgba(238, 243, 247, 0.68) 72%
+    ),
+    linear-gradient(
+      105deg,
+      rgba(218, 228, 236, 0.58) 0%,
+      rgba(239, 244, 248, 0.72) 48%,
+      rgba(248, 250, 252, 0.88) 100%
+    );
+}
+
+.theme-light .lyricsStage {
+  gap: clamp(40px, 5vw, 76px);
+  width: min(1440px, calc(100% - 64px));
+}
+
+.theme-light .lyricsColumn {
+  padding: clamp(20px, 2.4vw, 36px);
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 22px 54px rgba(51, 65, 85, 0.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+
+.theme-light .lyricsBox {
+  color: #526173;
+}
+
+.theme-light .lyricsBox .lyricLine,
+.theme-light .lyricsBox .lyricNotice {
+  color: #536274;
+  font-weight: 500;
+  opacity: 0.68;
+  text-shadow: none;
+  filter: none;
+}
+
+.theme-light .lyricsBox .lyricLine:hover {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.54);
+  color: #243244;
+  opacity: 0.92;
+}
+
+.theme-light .lyricsBox .activeLyric,
+.theme-light .lyricsBox .activeLyric:hover {
+  border: 1px solid rgba(0, 122, 85, 0.2);
+  border-radius: 16px;
+  background: linear-gradient(90deg, rgba(0, 122, 85, 0.07), rgba(0, 122, 85, 0.12));
+  color: #006747;
+  opacity: 1;
+  font-weight: 750;
+  text-shadow: none;
+  filter: none;
+  box-shadow:
+    inset 3px 0 0 rgba(0, 122, 85, 0.76),
+    0 10px 28px rgba(0, 122, 85, 0.08);
+  animation: lightLyricActiveEnter 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes lightLyricActiveEnter {
+  0% {
+    opacity: 0.55;
+    transform: translateY(5px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.theme-light .discWrap {
+  border-color: rgba(255, 255, 255, 0.92);
+  background: #dfe7ed;
+  box-shadow:
+    0 0 0 1px rgba(100, 116, 139, 0.3),
+    0 26px 60px rgba(30, 41, 59, 0.2),
+    0 8px 20px rgba(0, 122, 85, 0.1);
+}
+
+.theme-light .discWrap::before {
+  border-color: #f8fafc;
+  background: radial-gradient(circle at 38% 34%, #344354, #111827 68%);
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.38),
+    0 4px 12px rgba(15, 23, 42, 0.3);
+}
+
+.theme-light .discWrap::after {
+  background: radial-gradient(circle, transparent 42%, rgba(15, 23, 42, 0.26) 100%);
+  opacity: 0.32;
+}
+
+.theme-light .songAction .discWrap img {
+  transform: rotate(var(--disc-rotate-angle, 0deg)) scale(1.34);
+  filter:
+    saturate(calc(1.02 + var(--avatar-pulse, 0) * 0.16))
+    contrast(calc(1.02 + var(--avatar-pulse, 0) * 0.07))
+    brightness(calc(1 + var(--avatar-pulse, 0) * 0.05));
+}
+
+@media (max-width: 768px) {
+  .theme-light .pageGrid.view-lyrics .lyricsPanel {
+    border-radius: 18px;
+  }
+
+  .theme-light .lyricsStage {
+    width: calc(100% - 20px);
+    gap: clamp(14px, 2.5vh, 22px);
+  }
+
+  .theme-light .lyricsColumn {
+    width: 100%;
+    padding: 12px 8px;
+    border-radius: 18px;
+  }
+
+  .theme-light .lyricsBox .activeLyric,
+  .theme-light .lyricsBox .activeLyric:hover {
+    border-radius: 12px;
+    box-shadow: inset 3px 0 0 rgba(0, 122, 85, 0.72);
+  }
+}
+
+@media (max-width: 560px) {
+  .theme-light .pageGrid.view-lyrics .lyricsPanel {
+    border-radius: 14px;
+  }
+
+  .theme-light .lyricsColumn {
+    padding: 8px 4px;
+    border-color: rgba(148, 163, 184, 0.24);
+    background: rgba(255, 255, 255, 0.48);
+    box-shadow: none;
+  }
 }

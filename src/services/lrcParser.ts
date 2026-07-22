@@ -32,12 +32,36 @@ export function extractLrcFromGeminiOutput(raw) {
     return { ok: false, reason: "INVALID_LRC_STUB_FILE", stub: hitStub };
   }
 
-  // Case A: raw LRC (contains timestamps, no Python wrapper).
-  if (LRC_TIMESTAMP.test(text) && !text.includes("lrc_content")) {
-    return { ok: true, lrcText: text, sourceType: "raw_lrc" };
+  // Case A: Markdown code block. The Web UI prompt explicitly requests
+  // ```text, so extract the fenced payload before the generic raw check;
+  // otherwise the metadata preamble and fence markers would be saved into
+  // the final .lrc content.
+  const fenced = text.match(/```(?:text|lrc|txt|lyrics)?\s*\r?\n([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    const candidate = fenced[1].trim();
+    if (LRC_TIMESTAMP.test(candidate)) {
+      return { ok: true, lrcText: candidate, sourceType: "raw_lrc" };
+    }
   }
 
-  // Case B: Python wrapper with triple-double-quoted string.
+  // Case B: raw LRC (contains timestamps, no Python wrapper). If a renderer
+  // removed the markdown fences but left the three metadata lines above the
+  // timestamps, trim that preamble before returning the saved LRC payload.
+  if (LRC_TIMESTAMP.test(text) && !text.includes("lrc_content")) {
+    const lines = text.split(/\r?\n/);
+    const firstTimestampLine = lines.findIndex((line) => LRC_TIMESTAMP.test(line));
+    const preamble = firstTimestampLine > 0
+      ? lines.slice(0, firstTimestampLine).join("\n")
+      : "";
+    const hasMetadataPreamble =
+      /(?:Tên\s*bài\s*hát|Tên\s*các\s*ca\s*s[ĩỹ]|Thể\s*loại\s*nhạc)\s*:/iu.test(preamble);
+    const candidate = hasMetadataPreamble
+      ? lines.slice(firstTimestampLine).join("\n").trim()
+      : text;
+    return { ok: true, lrcText: candidate, sourceType: "raw_lrc" };
+  }
+
+  // Case C: Python wrapper with triple-double-quoted string.
   const tripleDouble = text.match(/lrc_content\s*=\s*"""([\s\S]*?)"""/);
   if (tripleDouble?.[1]) {
     const candidate = tripleDouble[1].trim();
@@ -46,7 +70,7 @@ export function extractLrcFromGeminiOutput(raw) {
     }
   }
 
-  // Case C: Python wrapper with triple-single-quoted string.
+  // Case D: Python wrapper with triple-single-quoted string.
   const tripleSingle = text.match(/lrc_content\s*=\s*'''([\s\S]*?)'''/);
   if (tripleSingle?.[1]) {
     const candidate = tripleSingle[1].trim();
@@ -55,9 +79,9 @@ export function extractLrcFromGeminiOutput(raw) {
     }
   }
 
-  // Case D: Gemini sometimes returns plain LRC but wrapped in a markdown code block.
-  // Strip code fences and try again.
-  const withoutFences = text.replace(/```(?:lrc|txt|python)?\n?/gi, "").trim();
+  // Case E: malformed/unclosed markdown fence — strip known fence markers
+  // and try once more as a compatibility fallback.
+  const withoutFences = text.replace(/```(?:text|lrc|txt|lyrics|python)?\n?/gi, "").trim();
   if (withoutFences !== text && LRC_TIMESTAMP.test(withoutFences)) {
     return { ok: true, lrcText: withoutFences, sourceType: "raw_lrc" };
   }
@@ -110,8 +134,8 @@ export function chooseBestLrcCandidate(candidates, videoId) {
 // ── Song metadata extraction ───────────────────────────────────────────────
 //
 // Gemini is told (see buildLrcPrompt) to return the song title, artist
-// names, and a single canonical genre in plain text alongside the .lrc
-// attachment, e.g.
+// names, and a single canonical genre in plain text before the LRC code
+// block, e.g.
 //
 //   Tên bài hát: Hãy Yêu Nhau Đi
 //   Tên các ca sỹ: Bùi Anh Tuấn, Phạm Quỳnh Anh
