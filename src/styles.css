@@ -524,6 +524,7 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 14px;
   padding: 0;
 }
 
@@ -7708,7 +7709,7 @@ html[data-theme="light"] body {
 /* Long karaoke lines often wrap on desktop. Give those wrapped lines and
    adjacent lyric slots a little more air without making compact views tall. */
 @media (min-width: 1025px) {
-  .lyricsBox.fixedLyricsWindow {
+  .lyricsBox.fixedLyricsWindow .lyricsTrack {
     gap: 20px;
   }
 
@@ -7721,7 +7722,7 @@ html[data-theme="light"] body {
 /* Standalone popup windows can be physically wide while reporting a smaller
    CSS viewport at high DPI. Target the actual surface so karaoke text keeps
    its breathing room on large displays regardless of scaling. */
-.svdmusic-view-standalone .lyricsBox.fixedLyricsWindow {
+.svdmusic-view-standalone .lyricsBox.fixedLyricsWindow .lyricsTrack {
   gap: clamp(28px, 3vh, 40px) !important;
 }
 
