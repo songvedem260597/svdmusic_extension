@@ -2006,7 +2006,9 @@ function App() {
   // Custom image opacity stays 1; the slider drives the shade/gradient
   // overlay thickness instead. See styles.css .appShell.homeView.hasCustomBg rules.
   const bgStrength = backgroundOpacity / 100;
-  const backgroundOverlayScale = theme === "light" ? 0.55 : 1;
+  // Light mode keeps the image more present while the cards provide the
+  // readability layer. Dark mode intentionally retains its existing shade.
+  const backgroundOverlayScale = theme === "light" ? 0.4 : 1;
   const baseShadeOpacity = 0.75 - bgStrength * 0.55;
   const shadeOpacity = baseShadeOpacity * backgroundOverlayScale;
   const gradientTop =

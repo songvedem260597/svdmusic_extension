@@ -6294,6 +6294,12 @@ input:focus-visible,
   padding-inline: clamp(20px, 3vw, 56px);
 }
 
+/* In light mode, mirror the small clearance above the player bar so the
+   content panels do not visually touch the header. */
+.theme-light .pageGrid.view-list {
+  padding-top: var(--ui-space-3);
+}
+
 .pageGrid.view-list .nowPlaying,
 .pageGrid.view-list .songListPanel {
   margin-inline: 0;
@@ -7285,9 +7291,9 @@ html[data-theme="light"] body {
 
 .appShell.theme-light.homeView.hasCustomBg .nowPlaying,
 .appShell.theme-light.homeView.hasCustomBg .songListPanel {
-  background: rgba(255, 255, 255, 0.62);
-  -webkit-backdrop-filter: blur(6px) saturate(1.04);
-  backdrop-filter: blur(6px) saturate(1.04);
+  background: rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(3px) saturate(1.04);
+  backdrop-filter: blur(3px) saturate(1.04);
 }
 
 .theme-light .sectionTitle h2,
@@ -7653,4 +7659,73 @@ html[data-theme="light"] body {
     background: transparent;
     box-shadow: none;
   }
+}
+
+/* Live-search must always float above the page panels. */
+.topBar {
+  position: relative;
+  z-index: 30;
+}
+
+.searchWrap {
+  z-index: 40;
+}
+
+.searchResults {
+  z-index: 41;
+}
+
+/* The dark result title is explicitly white in the legacy search rules. */
+.theme-light .searchResultMeta strong {
+  color: #152033;
+}
+
+.theme-light .searchResultMeta small,
+.theme-light .searchEmpty {
+  color: #526173;
+}
+
+/* Carry the karaoke cue into the active song state in light mode. */
+.theme-light .liveLyric,
+.theme-light .songRow.isActive .songMeta strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.theme-light .rowIndex {
+  color: #614700;
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.theme-light .songRow.isActive {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* Long karaoke lines often wrap on desktop. Give those wrapped lines and
+   adjacent lyric slots a little more air without making compact views tall. */
+@media (min-width: 1025px) {
+  .lyricsBox.fixedLyricsWindow {
+    gap: 20px;
+  }
+
+  .lyricsBox .lyricLine,
+  .lyricsBox .lyricNotice {
+    line-height: 1.34;
+  }
+}
+
+/* Standalone popup windows can be physically wide while reporting a smaller
+   CSS viewport at high DPI. Target the actual surface so karaoke text keeps
+   its breathing room on large displays regardless of scaling. */
+.svdmusic-view-standalone .lyricsBox.fixedLyricsWindow {
+  gap: clamp(28px, 3vh, 40px) !important;
+}
+
+.svdmusic-view-standalone .lyricsBox .lyricLine,
+.svdmusic-view-standalone .lyricsBox .lyricNotice {
+  line-height: 1.42 !important;
 }
