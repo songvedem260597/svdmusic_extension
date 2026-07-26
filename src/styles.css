@@ -7795,3 +7795,223 @@ html[data-theme="light"] body {
   color: var(--yellow-color);
   opacity: 1;
 }
+
+/* ============================================================
+   v1.1.9 — Visual polish layer
+   Mục tiêu: giữ nguyên nhận diện dark navy + mint nhưng tinh tế
+   hơn. Chỉ đổi màu sắc / chất liệu / bo góc — KHÔNG đổi layout,
+   không đổi kích thước các dòng lyric (JS đo đạc), không rename
+   class nào (.discWrap, .coverStack, .lyricLine... JS phụ thuộc).
+   ============================================================ */
+
+/* ---- 1. Token refinements -------------------------------------------- */
+/* Vàng neon #ffff00 → vàng đồng dịu. Mọi chỗ dùng var(--yellow-color)
+   (live lyric, active karaoke line, hover) tự nhận màu mới.
+   Light theme giữ token riêng (#806b00) nhờ specificity cao hơn. */
+:root {
+  --yellow-color: #ffd66e;
+  --accent-soft: rgba(0, 255, 179, 0.08);
+  --accent-border: rgba(0, 255, 179, 0.28);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+}
+
+/* ---- 2. Top bar: nút bớt "ồn", accent chỉ xuất hiện khi tương tác ----- */
+.topBadgeButton {
+  border-color: var(--ui-border);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(236, 240, 246, 0.85);
+}
+
+.topBadgeButton:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--green-color);
+  box-shadow: none;
+}
+
+.topBadgeButton:focus-visible {
+  border-color: var(--green-color);
+  box-shadow: var(--ui-focus);
+}
+
+/* Badge đếm bài giữ chút mint để làm điểm nhấn duy nhất của cụm nút. */
+.topBadge.topBadgeButton {
+  border-color: rgba(0, 255, 179, 0.22);
+  background: rgba(0, 255, 179, 0.07);
+  color: var(--green-color);
+}
+
+.topBadge.topBadgeButton:hover {
+  border-color: var(--accent-border);
+  background: rgba(0, 255, 179, 0.12);
+}
+
+/* ---- 3. Song list: hàng gọn hơn, active rõ ràng, index trầm ---------- */
+.songRow {
+  background: transparent;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.songRow:hover {
+  background-color: var(--surface-hover);
+  opacity: 1;
+}
+
+.songRow.isActive {
+  background:
+    linear-gradient(90deg, rgba(0, 255, 179, 0.1), rgba(0, 255, 179, 0.02));
+  box-shadow: inset 2px 0 0 var(--green-color);
+  opacity: 1;
+}
+
+.songRow.isActive .songMeta strong {
+  font-weight: 600;
+}
+
+/* Số thứ tự: đổi vàng chói → xám trầm; mint khi là bài đang phát. */
+.rowIndex {
+  color: var(--ui-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.songRow.isActive .rowIndex {
+  color: var(--green-color);
+  font-weight: 600;
+}
+
+.rowCover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Tag pill dịu lại để không cạnh tranh với tiêu đề bài hát. */
+.tagRow span,
+.songTag,
+.searchTag,
+.songLibraryRowTag {
+  border-color: rgba(0, 255, 179, 0.14);
+  background: rgba(0, 255, 179, 0.05);
+  color: rgba(126, 240, 198, 0.9);
+}
+
+/* ---- 4. Now playing -------------------------------------------------- */
+.coverStack {
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.liveLyric {
+  font-weight: 400;
+}
+
+/* ---- 5. Player bar: kính mờ thay cho gradient đặc -------------------- */
+.playerBar {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: rgba(10, 16, 28, 0.82);
+  background-image: none;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.miniCover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Glow nút play bớt gắt, thêm chiều sâu thay vì phát sáng neon. */
+.playerButtons .miniPlayButton {
+  box-shadow:
+    0 6px 20px rgba(21, 255, 146, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.playerButtons .miniPlayButton::before {
+  background: rgba(21, 255, 146, 0.4);
+}
+
+/* ---- 6. Đĩa xoay: viền mảnh hơn, thêm bóng đổ có chiều sâu ------------ */
+/* Chỉ đổi border/box-shadow — KHÔNG đụng transform/--bass (JS ghi). */
+.discWrap {
+  border-width: 4px;
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.discWrap::before {
+  border-color: rgba(255, 255, 255, 0.78);
+}
+
+/* ---- 7. Karaoke: glow vàng đồng thay cho vàng-xanh cũ ----------------- */
+.lyricsBox .activeLyric {
+  text-shadow: 0 2px 26px rgba(255, 214, 110, 0.32);
+}
+
+/* Light mode: active line trên nền cover tối — vàng đồng thay neon. */
+.theme-light .lyricsBox .activeLyric,
+.theme-light .lyricsBox .activeLyric:hover {
+  color: #ffd66e;
+}
+
+/* ---- 8. Light theme: đồng bộ các chỉnh sửa ở trên --------------------- */
+.theme-light .topBadgeButton {
+  border-color: var(--ui-border-strong);
+  background: #ffffff;
+  color: #334155;
+}
+
+.theme-light .topBadgeButton:hover {
+  border-color: #008a61;
+  background: #e9f8f2;
+  color: #006747;
+}
+
+.theme-light .topBadge.topBadgeButton {
+  border-color: rgba(0, 138, 97, 0.35);
+  background: #e9f8f2;
+  color: #006747;
+}
+
+.theme-light .songRow:hover {
+  border-color: transparent;
+  background-color: #edf4f1;
+}
+
+.theme-light .songRow.isActive {
+  border-color: transparent;
+  background: linear-gradient(90deg, #e2f7ef, #f4fbf8);
+  box-shadow: inset 2px 0 0 #00a878;
+}
+
+.theme-light .songRow.isActive .rowIndex {
+  color: #007a55;
+}
+
+.theme-light .rowIndex {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.theme-light .rowCover,
+.theme-light .miniCover {
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.1);
+}
+
+.theme-light .tagRow span,
+.theme-light .songTag,
+.theme-light .searchTag,
+.theme-light .songLibraryRowTag {
+  border-color: rgba(0, 122, 85, 0.24);
+  background: rgba(0, 122, 85, 0.07);
+  color: #00714e;
+}
+
+.theme-light .coverStack {
+  box-shadow:
+    0 18px 48px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(15, 23, 42, 0.08);
+}

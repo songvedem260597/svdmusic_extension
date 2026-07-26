@@ -6,6 +6,18 @@
 
 ## Version Changelog
 
+### v1.1.9 (2026-07-26)
+- **UI polish layer** — refactor giao diện giữ nguyên nhận diện dark navy + mint, thêm layer `v1.1.9 — Visual polish` ở cuối `src/styles.css`. Chỉ đổi màu/chất liệu/bo góc, KHÔNG đổi layout, không đổi kích thước lyric line (JS đo đạc), không rename class JS phụ thuộc (`.discWrap`, `.coverStack`, `.lyricLine`, `.view-lyrics`…).
+- Token: `--yellow-color` #ffff00 → #ffd66e (vàng đồng dịu) cho dark theme — live lyric, active karaoke line, hover đổi theo tự động; light theme giữ #806b00 riêng nhờ specificity `:root[data-theme=light]`. Thêm `--accent-soft`, `--accent-border`, `--surface-hover`.
+- Top bar: 4 nút (`.topBadgeButton`) chuyển từ outline mint đồng loạt → nền trung tính `rgba(255,255,255,0.045)` + border `--ui-border`, mint chỉ hiện khi hover/focus. Badge đếm bài (`.topBadge.topBadgeButton`) giữ mint làm điểm nhấn duy nhất.
+- Song list: `.rowIndex` bỏ vàng chói → `--ui-muted` (mint + đậm khi active); `.songRow.isActive` = gradient mint + thanh inset trái 2px `var(--green-color)`; hover nền `--surface-hover`; `.rowCover`/`.miniCover` thêm ring 1px; tag pill (`.songTag`, `.tagRow span`, `.searchTag`, `.songLibraryRowTag`) dịu lại.
+- Player bar: bỏ gradient đặc → kính mờ `rgba(10,16,28,0.82)` + `backdrop-filter: blur(18px)`; glow nút play giảm từ `0 0 30px rgba(21,255,146,0.5)` → shadow 2 lớp mềm; ripple `::before` giảm alpha 0.65 → 0.4.
+- Đĩa xoay: viền trắng đặc 5px → 4px `rgba(255,255,255,0.72)` + bóng đổ sâu (chỉ đổi border/box-shadow, không đụng transform/`--bass`).
+- Karaoke: glow active line từ vàng-xanh `rgba(217,221,0,0.28)` → vàng đồng `rgba(255,214,110,0.32)`; light-mode active line #ffff00 → #ffd66e.
+- Light theme: bộ override tương ứng (nút header trắng viền xám, hover mint nhạt; active row gradient `#e2f7ef` + inset `#00a878`, border transparent để không double-outline với rule cũ; rowIndex slate #64748b thay #614700 w800).
+- Lưu ý cascade: layer nằm CUỐI file nên thắng mọi rule cùng specificity trước đó; các rule `.theme-light .X` (specificity cao hơn) vẫn thắng phần dark. KHÔNG thêm rule unqualified đổi layout (grid-template-columns/min-height của `.songRow`…) vào layer này vì sẽ đè lên các media query responsive ở giữa file.
+- Build: sidepanel CSS 178.39 → 179.02 kB (gzip 37.63 kB); JS không đổi logic.
+
 ### v1.1.8 (2026-07-14)
 - Manifest version normalized to `1.1.8` (3-part semver, previously `1.1.7.001`). Chrome MV3 was warning "Manifest version 1.1.7.1 is not semver compliant".
 - **Fix Side Panel pin-back READY handshake.** Popup "Ghim lại" was stuck at `[PIN_BACK] WAITING_READY` and timed out because Side Panel's React tree mounts once per page lifetime and `chrome.sidePanel.open({windowId})` only refocuses an already-loaded surface — no remount, no fresh useEffect run. The previous mount effect read `getTransferIdFromUrl()`, but `sidepanel.html` is static with no query string, so it always early-returned before sending READY.
