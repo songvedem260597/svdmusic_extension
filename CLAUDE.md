@@ -6,6 +6,11 @@
 
 ## Version Changelog
 
+### v1.2.7 (2026-07-27)
+- **Bỏ thanh chỉ báo bên trái ở dòng đang phát.** `box-shadow: inset 2px 0 0` (thêm ở v1.1.9) bị gỡ ở cả 3 nơi: dark (`--green-color`), light (`#00a878`), và light + ảnh nền tuỳ chỉnh.
+- Dòng đang phát vẫn phân biệt được bằng nền gradient mint + tiêu đề và số thứ tự đổi màu mint, nên không mất tín hiệu.
+- Có ghi chú ở cuối `styles.css` để lần sau không ai "sửa lại" bằng cách thêm thanh đó về.
+
 ### v1.2.6 (2026-07-27)
 - **Tiêu đề dài ở khu "Đang phát" giờ cắt bằng "…".** Tên bài lấy từ YouTube có thể dài cả câu (kèm tên DJ, phiên bản, chữ Trung) — `.songHero h3` không giới hạn số dòng nên một tiêu đề như vậy chiếm hơn 10 dòng và đẩy vỡ bố cục (đo được: cao 622px thay vì 132px).
 - Cắt bằng `-webkit-line-clamp: 3`, xuống **2 dòng** ở màn hình thấp/hẹp (`max-height: 720px` hoặc `max-width: 720px`).

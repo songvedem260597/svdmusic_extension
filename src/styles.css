@@ -7860,7 +7860,7 @@ html[data-theme="light"] body {
 .songRow.isActive {
   background:
     linear-gradient(90deg, rgba(0, 255, 179, 0.1), rgba(0, 255, 179, 0.02));
-  box-shadow: inset 2px 0 0 var(--green-color);
+  box-shadow: none;
   opacity: 1;
 }
 
@@ -7981,7 +7981,7 @@ html[data-theme="light"] body {
 .theme-light .songRow.isActive {
   border-color: transparent;
   background: linear-gradient(90deg, #e2f7ef, #f4fbf8);
-  box-shadow: inset 2px 0 0 #00a878;
+  box-shadow: none;
 }
 
 .theme-light .songRow.isActive .rowIndex {
@@ -8090,7 +8090,7 @@ html[data-theme="light"] body {
     rgba(226, 247, 239, 0.82),
     rgba(244, 251, 248, 0.62)
   );
-  box-shadow: inset 2px 0 0 #00a878;
+  box-shadow: none;
 }
 
 .appShell.theme-light.homeView.hasCustomBg .weatherWidget {
@@ -8144,3 +8144,7 @@ html[data-theme="light"] body {
     line-clamp: 2;
   }
 }
+
+/* Dòng đang phát KHÔNG dùng thanh chỉ báo bên trái (bỏ theo yêu cầu ở v1.2.7).
+   Nó vẫn phân biệt được bằng nền gradient mint, tiêu đề và số thứ tự đổi màu
+   mint — đừng thêm lại `box-shadow: inset ...` vào `.songRow.isActive`. */
