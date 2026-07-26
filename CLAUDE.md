@@ -6,6 +6,17 @@
 
 ## Version Changelog
 
+### v1.2.3 (2026-07-27)
+- **Fix treo ở `bridge/mp3-ready` với file lớn — bỏ hẳn base64 khỏi đường bàn giao MP3.**
+- Triệu chứng: log chạy đến `Đã tải xong dữ liệu MP3, đang kiểm tra...` rồi đứng vĩnh viễn. Đây là dòng service worker in ra **ngay trước** `arrayBufferToBase64()` + `sendMessage`.
+- Nguyên nhân: SW tải bytes rồi phải đẩy sang sidepanel qua runtime message, mà cách duy nhất là base64 → file 139.6 MB phình thành chuỗi **186.2 MB** phải dựng nguyên trong RAM của SW rồi serialize. Hỏng vì kích thước message, hoặc vì SW hết bộ nhớ — không phân biệt được từ ngoài, và **cả hai đều biến mất nếu SW không giữ bytes**.
+- Sửa: SW chỉ resolve link rồi trả `{ downloadUrl, mimeType, size, title, duration, filesize }` và emit `mp3/result` kèm `downloadUrl` (không còn `audioBase64`). Sidepanel tự `fetch(downloadUrl)` → Blob → IndexedDB.
+  - Khả thi vì đã kiểm: link tải được **không cần Referer**, **dùng lại được nhiều lần**, và `https://*.yt2mp3converter.net/*` vốn đã có trong host_permissions.
+  - Sidepanel nhận `downloadUrl` thì fetch rồi **gọi lại chính listener** với `__blobReady` + `__headBytes`, nên toàn bộ khối kiểm tra size/type/header phía dưới chạy y nguyên cho cả hai đường — không đụng vào logic validation.
+  - Đường `audioBase64` cũ giữ nguyên làm fallback (mp3cow vẫn dùng).
+- Kết quả đo với đúng file 139.6 MB: **169 ms / peak heap 9 MB**, so với **9.900 ms / 469 MB** của đường base64 — nhanh hơn ~58 lần, tốn bộ nhớ ít hơn ~52 lần, và file chỉ truyền **một** lần thay vì hai.
+- Kiểm chứng: bytes trong IndexedDB đúng 146.400.960 (khớp `filesize` nhà cung cấp trả về), `audio/mpeg`, header `ff fb e4 64`; phát được `readyState: 4`, duration 3660s.
+
 ### v1.2.2 (2026-07-27)
 - **Fix nguyên nhân thật của "Không thể tải MP3": bridge yt2mp3 gọi endpoint đã chết.**
 - `yt2mp3ConvertMain` gọi `https://api.yt2mp3converter.net/api/new/convert?youtubeId=…` — host này trang **không còn dùng**, và giờ trả `HTTP 500 {"error":"Maximum number of key switches or API calls reached"}` cho **mọi** video. Extension đọc thành "provider chết" → rơi sang MP3Cow (đang hỏng thật) → fail toàn bộ.

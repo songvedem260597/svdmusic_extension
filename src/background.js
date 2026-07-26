@@ -1102,6 +1102,30 @@ async function fetchMp3FromYt2mp3PageBridge(youtubeUrl, { onProgress } = {}) {
     if (!downloadURL) throw new Error("YT2MP3_API_NO_LINK: response không có link.");
 
     emit("bridge/link-ready");
+
+    // ── Hand the URL to the sidepanel and stop here. ──────────────────────
+    // Downloading in the worker means the bytes then have to cross a runtime
+    // message, and the only way to do that is base64 — a 140 MB MP3 becomes a
+    // ~186 MB string the worker must hold in memory and serialise. That hung
+    // every time right after `bridge/mp3-ready`, whether because the message
+    // exceeded what the channel carries or because building it exhausted the
+    // worker's memory. Both disappear if the worker never holds the bytes.
+    //
+    // The download URL works from any extension context (no Referer needed,
+    // and it is reusable), and `https://*.yt2mp3converter.net/*` is already in
+    // host_permissions, so the sidepanel can fetch it directly — one transfer
+    // instead of two, and no base64 anywhere.
+    emit("bridge/mp3-ready");
+    return {
+      downloadUrl: downloadURL,
+      mimeType: "audio/mpeg",
+      size: apiFilesize,
+      title: apiTitle,
+      duration: apiDuration,
+      filesize: apiFilesize,
+    };
+
+    // eslint-disable-next-line no-unreachable
     // ── Try 1: SW fetch (no CORS). On ANY failure — network error,
     //    response not OK, invalid Blob from validator — we fall through
     //    to the MAIN-world fetch below. The validator is the same for
@@ -1899,6 +1923,44 @@ async function runMp3Job(job) {
     job.duration = typeof result.duration === "number" ? result.duration : null;
     job.audioSource = "yt2mp3-page-bridge";
     job.finishedAt = Date.now();
+
+    // URL hand-off: the worker never held the bytes, so there is nothing to
+    // encode. Ship the link and let the sidepanel fetch and validate it —
+    // it applies the same size/type/header checks before writing IndexedDB.
+    if (result && result.downloadUrl) {
+      job.status = "ready";
+      job.size = typeof result.size === "number" ? result.size : null;
+      job.mimeType = result.mimeType || "audio/mpeg";
+      job.title = result.title || "";
+      job.duration = typeof result.duration === "number" ? result.duration : null;
+      job.filesize = typeof result.filesize === "number" ? result.filesize : job.size;
+      job.keepUntil = job.finishedAt + MP3_READY_TTL_MS;
+      console.log("[svdmusic-bg] emitting mp3/result with downloadUrl", {
+        videoId,
+        size: job.size,
+        host: (() => { try { return new URL(result.downloadUrl).host; } catch (_) { return "?"; } })(),
+      });
+      emitMp3Event({
+        type: "mp3/result",
+        correlationId,
+        videoId,
+        mimeType: job.mimeType,
+        size: job.size,
+        title: job.title,
+        filesize: job.filesize,
+        duration: job.duration,
+        audioSource: job.audioSource || "yt2mp3-page-bridge",
+        downloadUrl: result.downloadUrl,
+      });
+      emitMp3Event({
+        type: "mp3/ready",
+        correlationId,
+        videoId,
+        audioKey: `audio:${videoId}`,
+        size: job.size,
+      });
+      return;
+    }
 
     // Defence-in-depth: refuse to ship a too-small arrayBuffer to the
     // sidepanel. fetchMp3FromYt2mp3PageBridge already enforces 100 KB,

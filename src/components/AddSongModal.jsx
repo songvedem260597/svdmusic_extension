@@ -766,10 +766,51 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
           return;
         }
 
+        // Large files never survive a single runtime message: a 140 MB MP3
+        // becomes a ~186 MB base64 string, which the service worker has to
+        // build in memory and then serialise across the channel. That hung
+        // right after `bridge/mp3-ready`. The background now hands over the
+        // download URL instead and the sidepanel fetches the bytes itself —
+        // no base64, no giant message, and the file is only transferred once.
+        if (message.type === "mp3/result" && message.downloadUrl && !message.__blobReady) {
+          (async () => {
+            try {
+              appendLog("Đang tải MP3 trực tiếp từ dịch vụ...");
+              const resp = await fetch(message.downloadUrl);
+              if (!resp.ok) {
+                finalize({
+                  ok: false, code: "http", httpStatus: resp.status,
+                  message: "Tải MP3 thất bại (HTTP " + resp.status + ").",
+                });
+                return;
+              }
+              const blob = await resp.blob();
+              const head = new Uint8Array(
+                await blob.slice(0, 4).arrayBuffer()
+              );
+              appendLog(
+                "Đã tải xong " + (blob.size / (1024 * 1024)).toFixed(1) + " MB."
+              );
+              // Re-enter with the bytes attached so the validation below runs
+              // unchanged for both transports.
+              listener({ ...message, __blobReady: blob, __headBytes: head });
+            } catch (err) {
+              finalize({
+                ok: false, code: "network", httpStatus: null,
+                message: "Không tải được MP3: " + (err?.message || err),
+              });
+            }
+          })();
+          return;
+        }
+
         if (message.type === "mp3/result") {
           let blob = null;
           let decodedBytes = null;
-          if (message.audioBase64) {
+          if (message.__blobReady) {
+            blob = message.__blobReady;
+            decodedBytes = message.__headBytes;
+          } else if (message.audioBase64) {
             decodedBytes = base64ToUint8Array(message.audioBase64);
 
             if (
