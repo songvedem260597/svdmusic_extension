@@ -8015,3 +8015,38 @@ html[data-theme="light"] body {
     0 18px 48px rgba(15, 23, 42, 0.18),
     0 0 0 1px rgba(15, 23, 42, 0.08);
 }
+
+/* ── Add-song: "Nhạc không lời" opt-out ────────────────────────────────────
+   `.modalField` is a grid of stacked label + control, which turns a checkbox
+   into a full-width block. This row needs the opposite: control first, text
+   beside it. */
+.modalField.addSongNoLyrics {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.modalField.addSongNoLyrics input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  margin-top: 2px;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: var(--green-color);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.addSongNoLyricsText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modalField.addSongNoLyrics .modalFieldHint {
+  font-size: 11px;
+  line-height: 1.45;
+}

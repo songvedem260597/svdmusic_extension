@@ -167,6 +167,101 @@
   const RESPONSE_TIMEOUT_MS = 5 * 60 * 1000;
   const MIN_TIMESTAMP_LINES = 10;
 
+  // ── Gemini failure detection ──────────────────────────────────────────────
+  // Without this the wait loop cannot tell "still generating" from "already
+  // failed": a rate limit or an error banner just means the response never
+  // validates, so we used to spin the full RESPONSE_TIMEOUT_MS (5 minutes)
+  // before reporting a generic timeout. Detecting the failure lets the
+  // sidepanel throw the chat away and retry in a fresh tab within seconds.
+  //
+  // Phrases are matched ONLY inside error-ish containers, never against the
+  // whole page body — song lyrics legitimately contain words like "sorry" or
+  // "error", and a false positive would kill a perfectly good response.
+  const ERROR_CONTAINER_SELECTORS = [
+    "[role=\"alert\"]",
+    "[data-test-id*=\"error\" i]",
+    "[class*=\"error\" i]",
+    "simple-snack-bar",
+    ".mat-mdc-snack-bar-label",
+    "message-error",
+    "model-response-error",
+  ];
+
+  // Distinctive enough to trust anywhere on the page.
+  const GLOBAL_ERROR_PHRASES = [
+    "something went wrong",
+    "đã xảy ra lỗi",
+    "có lỗi xảy ra",
+    "you've reached your limit",
+    "you have reached your limit",
+    "bạn đã đạt đến giới hạn",
+    "bạn đã đạt giới hạn",
+    "rate limit",
+    "quota exceeded",
+    "try again later",
+    "vui lòng thử lại sau",
+    "hãy thử lại sau",
+    "unable to generate",
+    "không thể tạo",
+    "gemini is currently unavailable",
+    "hiện không khả dụng",
+  ];
+
+  // Shorter phrases — only believed inside an error container.
+  const SCOPED_ERROR_PHRASES = [
+    "error",
+    "lỗi",
+    "failed",
+    "thất bại",
+    "try again",
+    "thử lại",
+  ];
+
+  // innerText ONLY — never textContent. textContent includes <script> and
+  // <style> bodies plus display:none markup, and Gemini ships its own error
+  // strings ("Something went wrong", …) inside its JS bundle. Scanning
+  // textContent therefore matched on every single page load and would have
+  // failed every generation with a phantom error.
+  function textOf(node) {
+    try {
+      const text = node?.innerText;
+      return typeof text === "string" ? text.toLowerCase() : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  /**
+   * Returns a short description of a visible Gemini failure, or null.
+   * Only counts nodes that are actually rendered, so hidden templates and
+   * pre-rendered snackbars never trigger a false retry.
+   */
+  function detectGeminiError() {
+    const bodyText = textOf(document.body);
+    for (const phrase of GLOBAL_ERROR_PHRASES) {
+      if (bodyText.includes(phrase)) return phrase;
+    }
+    for (const selector of ERROR_CONTAINER_SELECTORS) {
+      let nodes = [];
+      try {
+        nodes = Array.from(document.querySelectorAll(selector));
+      } catch (_) {
+        continue;
+      }
+      for (const node of nodes) {
+        if (!isVisible(node)) continue;
+        const text = textOf(node).trim();
+        if (!text) continue;
+        for (const phrase of SCOPED_ERROR_PHRASES) {
+          if (text.includes(phrase)) {
+            return text.slice(0, 160);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   const COMPOSER_SELECTORS = [
     "div.ql-editor[contenteditable=\"true\"]",
     "div[contenteditable=\"true\"][data-placeholder*=\"hỏi\" i]",
@@ -3458,8 +3553,26 @@ async function deleteCurrentGeminiConversationFromTopMenu() {
     let announcedAttachment = false;
     let lastInlineText = "";
     let inlineStableSince = Date.now();
+    // Require the error to survive two consecutive polls. Gemini paints a
+    // snackbar for transient, self-healing conditions too; bailing on the very
+    // first frame would throw away responses that were about to arrive.
+    let errorSeenStreak = 0;
 
     while (!cancelledRef.current && Date.now() - start < RESPONSE_TIMEOUT_MS) {
+      // 0) Bail out fast on a visible failure instead of polling for 5 minutes.
+      // The sidepanel turns this into "delete the chat and retry in a new tab".
+      const errorText = detectGeminiError();
+      if (errorText) {
+        errorSeenStreak += 1;
+        if (errorSeenStreak >= 2) {
+          throw new Error("GEMINI_ERROR: " + errorText);
+        }
+        onProgress?.("Phát hiện dấu hiệu lỗi từ Gemini, đang xác nhận...");
+        await sleep(1000);
+        continue;
+      }
+      errorSeenStreak = 0;
+
       // 1) Look at new assistant response nodes first.
       const newNodes = nodesAfterSnapshot(snapshot);
 

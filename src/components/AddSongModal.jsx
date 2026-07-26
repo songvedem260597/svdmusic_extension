@@ -6,6 +6,9 @@ import {
   parseYoutubeShareUrl,
   buildLrcPrompt,
   getThumbnailUrls,
+  fetchVideoDurationSeconds,
+  formatDurationLabel,
+  LYRICS_OPTIONAL_MIN_SECONDS,
 } from "../services/youtube.js";
 import {
   startLrcGeneration,
@@ -13,6 +16,8 @@ import {
   cancelLrcGeneration,
   inspectLrcLock,
   forceResetLrcLock,
+  discardFailedLrcChat,
+  isRetryableGeminiError,
 } from "../services/geminiLrc.js";
 import { appendUserSong } from "../services/songStorage.js";
 import {
@@ -89,6 +94,7 @@ function mapMp3ErrorToMessage(httpStatus, fallbackReason) {
 const STEPS = {
   IDLE: "idle",
   VALIDATE: "validate",
+  DURATION_PROBE: "duration-probe",
   COVER: "cover",
   GEMINI_OPEN: "gemini-open",
   GEMINI_PROMPT: "gemini-prompt",
@@ -109,6 +115,7 @@ const STEPS = {
 const STEP_MESSAGES = {
   [STEPS.IDLE]: "Sẵn sàng",
   [STEPS.VALIDATE]: "Đang kiểm tra liên kết YouTube...",
+  [STEPS.DURATION_PROBE]: "Đang kiểm tra độ dài bài hát...",
   [STEPS.COVER]: "Đang tải ảnh thumbnail...",
   [STEPS.GEMINI_OPEN]: "Đang mở Gemini...",
   [STEPS.GEMINI_PROMPT]: "Đang chèn prompt vào Gemini...",
@@ -196,9 +203,17 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
   const [apiKey, setApiKey] = useState("");
   // Whether the API key input field is visible (toggle via gear icon)
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  // User declares the track has no lyrics (instrumental, lo-fi, DJ set...).
+  // Skips the Gemini step entirely instead of waiting for it to fail.
+  const [noLyrics, setNoLyrics] = useState(false);
+  // Probed video length in seconds, or null while unknown.
+  const [durationSeconds, setDurationSeconds] = useState(null);
 
   const correlationIdRef = useRef(null);
   const jobIdRef = useRef(null);
+  // Mirrors the "Nhạc không lời" checkbox so the async add flow reads a stable
+  // value instead of a captured render's state.
+  const noLyricsRef = useRef(false);
   const abortRef = useRef(false);
   const stepRef = useRef(STEPS.IDLE);
   const onCloseRef = useRef(onClose);
@@ -993,6 +1008,7 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
     lrcDownloadPath,
     coverBlob,
     audioResult,
+    allowMissingLrc = false,
   }) {
     if (!videoId) throw new Error("persistSong: thiếu videoId.");
     if (!audioResult || audioResult.ok !== true || !audioResult.blob) {
@@ -1057,15 +1073,23 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         appendLog("Cảnh báo: không có cover blob — bài hát sẽ dùng placeholder.");
       }
 
-      // ── Step 2: LRC text (required for the song to be useful) ───────
-      if (!lrcText) {
+      // ── Step 2: LRC text (optional) ─────────────────────────────────
+      // A missing LRC used to abort the whole add. That is wrong for
+      // instrumentals and for long mixes, where there is nothing to
+      // transcribe and Gemini would only burn minutes before failing. The
+      // player already renders "Bài hát này chưa có lyric." when a song has
+      // no lyricsKey, so a song without lyrics is perfectly usable.
+      if (lrcText) {
+        await saveLrcText(videoId, lrcText);
+        lrcWritten = true;
+        appendLog("Đã lưu LRC vào IndexedDB (key: " + lrcKey + ").");
+      } else if (allowMissingLrc) {
+        appendLog("Bỏ qua LRC — bài hát được lưu ở dạng không lời.");
+      } else {
         throw new Error(
           "persistSong: thiếu lrcText — không thể commit bài hát không có lời."
         );
       }
-      await saveLrcText(videoId, lrcText);
-      lrcWritten = true;
-      appendLog("Đã lưu LRC vào IndexedDB (key: " + lrcKey + ").");
 
       // ── Step 3: MP3 audio blob (REQUIRED) ───────────────────────────
       await saveAssetByKey(audioKey, audioBlob);
@@ -1084,8 +1108,9 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         sourceUrl,
         coverKey,
         audioKey,
-        lyricsKey: lrcKey,
-        lyricsTextKey: lrcKey,
+        lyricsKey: lrcWritten ? lrcKey : null,
+        lyricsTextKey: lrcWritten ? lrcKey : null,
+        hasLyrics: lrcWritten,
         cover: "",
         banner: "",
         audio: "",
@@ -1097,9 +1122,9 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         addedAt: Date.now(),
         isUserSong: true,
       };
-      if (lrcFileName) song.lyricsFileName = lrcFileName;
-      if (lrcDownloadPath) song.lyricsDownloadPath = lrcDownloadPath;
-      song.lyricsDownloaded = true;
+      if (lrcWritten && lrcFileName) song.lyricsFileName = lrcFileName;
+      if (lrcWritten && lrcDownloadPath) song.lyricsDownloadPath = lrcDownloadPath;
+      song.lyricsDownloaded = lrcWritten;
 
       await appendUserSong(song);
       setFinalSong(song);
@@ -1149,14 +1174,142 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
     }
   }
 
+  // Gemini is flaky: rate limits, "something went wrong" banners and outright
+  // refusals are routine. Retrying inside the same conversation mostly
+  // reproduces the failure because the model keeps answering in the context of
+  // the broken turn, so each attempt deletes the failed chat and starts over in
+  // a brand-new tab.
+  const GEMINI_MAX_ATTEMPTS = 3;
+
+  async function startLrcGenerationWithRetry({ youtubeLink, prompt }, onProgress) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt += 1) {
+      if (abortRef.current) throw new Error("Đã hủy.");
+      if (attempt > 1) {
+        appendLog(
+          "Thử lại Gemini lần " + attempt + "/" + GEMINI_MAX_ATTEMPTS + " trong tab mới..."
+        );
+      }
+      try {
+        return await startLrcGeneration({ youtubeLink, prompt }, onProgress);
+      } catch (error) {
+        lastError = error;
+        if (error?.lockedBy) throw error;
+        if (!isRetryableGeminiError(error)) throw error;
+        if (attempt === GEMINI_MAX_ATTEMPTS) break;
+        appendLog("Gemini lỗi: " + (error?.message || error));
+        appendLog("Đang xoá cuộc trò chuyện lỗi và mở tab mới...");
+        await discardFailedLrcChat({
+          correlationId: correlationIdRef.current,
+          jobId: jobIdRef.current,
+        });
+      }
+    }
+    throw lastError || new Error("Gemini không trả về kết quả.");
+  }
+
+  /**
+   * Decides whether this track may be committed without lyrics, BEFORE the
+   * Gemini step runs. Waiting five minutes for a transcript that either cannot
+   * exist (instrumental) or is not worth the wait (a 40-minute mix) is the
+   * single slowest way to fail, so the decision has to happen up front.
+   */
+  async function resolveLyricsOptional(videoId) {
+    if (noLyricsRef.current) {
+      appendLog("Đã đánh dấu 'nhạc không lời' — sẽ lưu bài mà không cần LRC.");
+      return true;
+    }
+    setBusyStep(STEPS.DURATION_PROBE, STEP_MESSAGES[STEPS.DURATION_PROBE]);
+    const seconds = await fetchVideoDurationSeconds(videoId);
+    setDurationSeconds(seconds);
+    if (seconds == null) {
+      appendLog("Không đọc được độ dài video — vẫn yêu cầu LRC như bình thường.");
+      return false;
+    }
+    appendLog("Độ dài bài hát: " + formatDurationLabel(seconds) + ".");
+    if (seconds >= LYRICS_OPTIONAL_MIN_SECONDS) {
+      appendLog(
+        "Bài dài từ " +
+          formatDurationLabel(LYRICS_OPTIONAL_MIN_SECONDS) +
+          " trở lên — LRC không bắt buộc, sẽ vẫn lưu nếu Gemini không trả lời được."
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Shared tail for every add path: fetch + validate the MP3, then commit.
+   * `lrcInfo` may be null when the track is saved without lyrics.
+   */
+  async function commitSong({ videoId, sourceUrl, coverBlob, lrcInfo, lyricsOptional }) {
+    const audioResult = await fetchAndValidateAudio(videoId, sourceUrl);
+
+    if (!audioResult.ok) {
+      appendLog("Đã hủy thêm bài: MP3 không tải được.");
+      const mapped = mapMp3ErrorToMessage(
+        audioResult.httpStatus,
+        audioResult.message
+      );
+      try {
+        const removed = await rollbackAddSongAssets(videoId);
+        if (removed.removed.length) {
+          appendLog("[AddSongRollback] đã xoá: " + removed.removed.join(", "));
+        }
+        appendLog("Đã rollback cover/LRC/MP3 vì thêm bài thất bại.");
+      } catch (rbErr) {
+        appendLog(
+          "Cảnh báo: rollback sau lỗi MP3 thất bại (" + (rbErr?.message || rbErr) + ")."
+        );
+      }
+      fail(mapped.userMessage, new Error(mapped.technicalReason));
+      return;
+    }
+
+    setBusyStep(STEPS.AUDIO_PROMPT, STEP_MESSAGES[STEPS.AUDIO_PROMPT]);
+    appendLog("MP3 đã sẵn sàng — đang commit bài hát.");
+
+    try {
+      await persistSong({
+        videoId,
+        sourceUrl,
+        title: titleRef.current || geminiMetaRef.current.title || "",
+        artist: artistRef.current || geminiMetaRef.current.artist || "",
+        genre: geminiMetaRef.current.genre || "",
+        lrcText: lrcInfo?.lrcText || "",
+        lrcFileName: lrcInfo?.fileName || "",
+        lrcDownloadPath: lrcInfo?.downloadPath || "",
+        coverBlob,
+        audioResult,
+        allowMissingLrc: lyricsOptional,
+      });
+    } catch (err) {
+      fail(
+        "Không lưu được bài hát: " + (err?.message || err) + ". Đã xoá dữ liệu tạm.",
+        err
+      );
+    }
+  }
+
   async function runGemini({ videoId }) {
     const sourceUrl = linkRef.current.trim();
     const prompt = buildLrcPrompt(sourceUrl, videoId);
+
+    const lyricsOptional = await resolveLyricsOptional(videoId);
+
     setBusyStep(STEPS.GEMINI_OPEN, STEP_MESSAGES[STEPS.GEMINI_OPEN]);
 
     // Fetch the cover into memory (no IndexedDB write yet). persistSong
     // commits it atomically alongside the LRC and MP3.
     const coverBlob = await fetchCoverBlob(videoId);
+
+    // Declared instrumental: there is nothing to transcribe, so skip Gemini
+    // entirely rather than open a tab and wait for it to come back empty.
+    if (noLyricsRef.current) {
+      appendLog("Bỏ qua Gemini vì bài hát được đánh dấu không lời.");
+      await commitSong({ videoId, sourceUrl, coverBlob, lrcInfo: null, lyricsOptional: true });
+      return;
+    }
 
     const handleProgress = (payload) => {
       if (!payload) return;
@@ -1178,7 +1331,7 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
 
     let handle;
     try {
-      handle = await startLrcGeneration(
+      handle = await startLrcGenerationWithRetry(
         { youtubeLink: sourceUrl, prompt },
         handleProgress
       );
@@ -1193,6 +1346,14 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
         appendLog("Phiên Gemini trước vẫn được giữ — hãy đóng hết tab Gemini rồi bấm 'Hủy lock cũ' để tiếp tục.");
         return;
       }
+      // Gemini failing is not fatal for a track that does not need lyrics.
+      if (lyricsOptional) {
+        appendLog(
+          "Gemini lỗi (" + (error?.message || error) + ") — bài đủ điều kiện lưu không lời, vẫn tiếp tục."
+        );
+        await commitSong({ videoId, sourceUrl, coverBlob, lrcInfo: null, lyricsOptional: true });
+        return;
+      }
       fail(error.message || "Lỗi khi chạy Gemini.", error);
       return;
     }
@@ -1202,93 +1363,33 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
     jobIdRef.current = jobId;
 
     const lrcRaw = result?.lrcText || "";
-    if (!lrcRaw) {
-      fail(
-        "Gemini đã hoàn tất phản hồi nhưng không có nội dung LRC. " +
-          "Bài hát chưa được thêm vào danh sách để tránh lưu sai.",
-        null
-      );
-      return;
+
+    // LRC is parsed in-memory only — we wait for the MP3 result before
+    // committing anything to IndexedDB.
+    let lrcInfo = lrcRaw ? prepareLrcInfo(videoId, lrcRaw) : null;
+
+    if (lrcRaw) {
+      appendLog("Đã nhận LRC raw text từ Gemini.");
+      // Auto-fill Tên bài hát / Tên các ca sỹ từ phản hồi Gemini (nếu có).
+      // Không ghi đè nếu user đã nhập tay.
+      tryAutoFillMeta(lrcRaw);
     }
 
-    appendLog("Đã nhận LRC raw text từ Gemini.");
-
-    // LRC is now parsed in-memory only — we wait for the MP3 result before
-    // committing anything to IndexedDB. If MP3 fails the helper at the
-    // end of this function will call `rollbackAddSongAssets(videoId)`.
-    const lrcInfo = prepareLrcInfo(videoId, lrcRaw);
     if (!lrcInfo) {
-      fail(
-        "Không trích xuất được LRC hợp lệ từ phản hồi của Gemini. " +
-          "Bài hát chưa được thêm vào danh sách để tránh lưu sai.",
-        null
-      );
-      return;
-    }
-
-    // Auto-fill Tên bài hát / Tên các ca sỹ từ phản hồi Gemini (nếu có).
-    // Không ghi đè nếu user đã nhập tay.
-    tryAutoFillMeta(lrcRaw);
-
-    // Run the MP3 pipeline. Atomic flow: if this fails (HTTP 410, bad
-    // header, IndexedDB error, etc.) we abort and rollback. No song is
-    // ever persisted with `audioMissing: true` under the new contract.
-    const audioResult = await fetchAndValidateAudio(videoId, sourceUrl);
-
-    if (!audioResult.ok) {
-      // Map the failure to a user-facing message and trigger rollback
-      // for any assets that may have leaked in earlier steps (cover is
-      // the most likely — we fetched it at the top of this function).
-      appendLog("Đã hủy thêm bài: MP3 không tải được.");
-      const mapped = mapMp3ErrorToMessage(
-        audioResult.httpStatus,
-        audioResult.message
-      );
-      try {
-        const removed = await rollbackAddSongAssets(videoId);
-        if (removed.removed.length) {
-          appendLog(
-            "[AddSongRollback] đã xoá: " + removed.removed.join(", ")
-          );
-        }
-        appendLog("Đã rollback cover/LRC/MP3 vì thêm bài thất bại.");
-      } catch (rbErr) {
-        appendLog(
-          "Cảnh báo: rollback sau lỗi MP3 thất bại (" +
-            (rbErr?.message || rbErr) +
-            ")."
-        );
+      const reason = lrcRaw
+        ? "Không trích xuất được LRC hợp lệ từ phản hồi của Gemini."
+        : "Gemini đã hoàn tất phản hồi nhưng không có nội dung LRC.";
+      // A long or instrumental track is still worth saving without lyrics —
+      // only a normal song aborts here.
+      if (lyricsOptional) {
+        appendLog(reason + " Bài đủ điều kiện lưu không lời — vẫn tiếp tục.");
+      } else {
+        fail(reason + " Bài hát chưa được thêm vào danh sách để tránh lưu sai.", null);
+        return;
       }
-      fail(mapped.userMessage, new Error(mapped.technicalReason));
-      return;
     }
 
-    setBusyStep(STEPS.AUDIO_PROMPT, STEP_MESSAGES[STEPS.AUDIO_PROMPT]);
-    appendLog("MP3 đã sẵn sàng — đang commit bài hát.");
-
-    try {
-      await persistSong({
-        videoId,
-        sourceUrl,
-        title: titleRef.current || geminiMetaRef.current.title || "",
-        artist: artistRef.current || geminiMetaRef.current.artist || "",
-        genre: geminiMetaRef.current.genre || "",
-        lrcText: lrcInfo.lrcText,
-        lrcFileName: lrcInfo.fileName,
-        lrcDownloadPath: lrcInfo.downloadPath,
-        coverBlob,
-        audioResult,
-      });
-    } catch (err) {
-      // persistSong already rolled back its own partial writes; we just
-      // need a user-facing message. The error from persistSong is
-      // typically the IndexedDB write failure itself.
-      fail(
-        "Không lưu được bài hát: " + (err?.message || err) +
-          ". Đã xoá dữ liệu tạm.",
-        err
-      );
-    }
+    await commitSong({ videoId, sourceUrl, coverBlob, lrcInfo, lyricsOptional });
   }
 
   /**
@@ -1673,6 +1774,8 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
     setNeedLogin(false);
     setHasStarted(true);
     setRefusalDetected(false);
+    noLyricsRef.current = noLyrics;
+    setDurationSeconds(null);
 
     setBusyStep(STEPS.VALIDATE, STEP_MESSAGES[STEPS.VALIDATE]);
 
@@ -2054,6 +2157,29 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
               />
             </label>
           </div>
+
+          <label className="modalField addSongNoLyrics">
+            <input
+              type="checkbox"
+              checked={noLyrics}
+              onChange={(event) => {
+                setNoLyrics(event.target.checked);
+                noLyricsRef.current = event.target.checked;
+              }}
+              disabled={inProgress && !needLogin}
+            />
+            <span className="addSongNoLyricsText">
+              <span>Nhạc không lời</span>
+              <span className="modalFieldHint">
+                Bỏ qua bước Gemini và lưu bài ngay. Bài dài từ{" "}
+                {formatDurationLabel(LYRICS_OPTIONAL_MIN_SECONDS)} trở lên cũng
+                được lưu kể cả khi không lấy được lời.
+                {durationSeconds != null
+                  ? " Độ dài phát hiện: " + formatDurationLabel(durationSeconds) + "."
+                  : ""}
+              </span>
+            </span>
+          </label>
 
           <div
             className={"modalStatus " + (step === STEPS.ERROR ? "isError" : "")}

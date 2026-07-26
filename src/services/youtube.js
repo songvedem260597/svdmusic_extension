@@ -94,6 +94,50 @@ export function getBestThumbnailUrl(videoId) {
   return list[0] || null;
 }
 
+// A track at or above this length is treated as "lyrics optional": DJ sets,
+// mixes, live recordings and lo-fi streams either have no lyrics at all or are
+// long enough that asking Gemini for a timed transcript is a waste of minutes.
+export const LYRICS_OPTIONAL_MIN_SECONDS = 600; // 10 minutes
+
+/**
+ * Best-effort video length lookup, in seconds, BEFORE the MP3 pipeline runs.
+ *
+ * The MP3 provider reports a duration too, but only after the whole download
+ * completes — far too late to decide whether the Gemini step is worth running.
+ * The watch page embeds the length in its player config, so one cheap GET
+ * answers the question up front. `https://*.youtube.com/*` is already in
+ * host_permissions, so no manifest change is needed.
+ *
+ * Returns null when the lookup fails for any reason; callers must treat that as
+ * "unknown", never as "short".
+ */
+export async function fetchVideoDurationSeconds(videoId, { signal } = {}) {
+  if (!VIDEO_ID_REGEX.test(videoId || "")) return null;
+  try {
+    const response = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      credentials: "omit",
+      signal,
+    });
+    if (!response.ok) return null;
+    const html = await response.text();
+    // Present in the ytInitialPlayerResponse blob as "lengthSeconds":"213".
+    const match = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/);
+    if (!match) return null;
+    const seconds = Number(match[1]);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function formatDurationLabel(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "không rõ";
+  const total = Math.round(seconds);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 // Detects if the URL contains a playlist/queue context. Used for logging only.
 export function describeUrlContext(input) {
   if (!input) return null;

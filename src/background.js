@@ -72,17 +72,6 @@ chrome.tabs?.onRemoved?.addListener?.((tabId) => {
   // references it. Do NOT auto-open the sidepanel — the user explicitly closed
   // the standalone; the sidepanel already has its own React instance.
 
-  // Helper: read and clean a single transfer object if it references tabId.
-  function cleanupTransfer(transfer) {
-    if (!transfer) return;
-    const keysToRemove = [];
-    if (transfer.standaloneTabId === tabId) keysToRemove.push("svdmusic.standaloneTabId");
-    if (transfer.originWindowId === tabId) keysToRemove.push("svdmusic.originWindowId");
-    if (keysToRemove.length > 0) {
-      chrome.storage.session.remove(keysToRemove, () => { /* ignore */ });
-    }
-  }
-
   chrome.storage.session.get([
     "svdmusic.viewOwner",
     "svdmusic.standaloneTabId",
@@ -108,9 +97,11 @@ chrome.tabs?.onRemoved?.addListener?.((tabId) => {
     // 3. Clear any active transfer or pending snapshot that references this tabId.
     const transfer = result?.["svdmusic.activeViewTransfer"];
     if (transfer) {
-      const refsThisTab =
-        transfer.standaloneTabId === tabId ||
-        transfer.originWindowId === tabId;
+      // Compare tab ids to tab ids only. This used to also match the transfer's
+      // origin *window* id against this *tab* id — two different id spaces, so
+      // the test was meaningless at best, and at worst dropped a live transfer
+      // record out from under an in-flight handshake.
+      const refsThisTab = transfer.standaloneTabId === tabId;
       if (refsThisTab) {
         chrome.storage.session.remove("svdmusic.activeViewTransfer", () => { /* ignore */ });
         modified = true;
@@ -2128,10 +2119,24 @@ async function runMp3Job(job) {
       extractHttpStatus(errMsg) ||
       0;
 
+    // A failure raised while validating what the provider actually sent —
+    // wrong content-type, wrong magic bytes, body too small — or while waiting
+    // for it, carries `mp3Stage`. Those are exactly the failures the second
+    // provider can recover from, and they routinely arrive as HTTP 200: the
+    // service answers "OK" and hands back an error page or an HTML body.
+    //
+    // The status-code and regex tests below never matched that shape unless the
+    // message happened to contain the word "audio", so whether the fallback ran
+    // came down to whether `type=audio/...` was in the error string. The user
+    // saw "Không thể tải MP3 ... (HTTP 200)" with MP3Cow never attempted.
+    const providerPayloadUnusable =
+      typeof error?.mp3Stage === "string" && error.mp3Stage.length > 0;
+
     // Decide whether the failure is one MP3Cow can recover from.
-    // Covers: HTTP 410/429/403/404, 5xx, NO_LINK, invalid-audio, network
-    // failures, message-level HTTP status, etc.
+    // Covers: unusable provider payloads, HTTP 410/429/403/404, 5xx, NO_LINK,
+    // invalid-audio, network failures, message-level HTTP status, etc.
     const isFallbackEligible =
+      providerPayloadUnusable ||
       httpStatus === 410 ||
       httpStatus === 429 ||
       httpStatus === 403 ||
@@ -3153,6 +3158,65 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         jobTabs.delete(jobId);
         reply(sendResponse, { ok: true, cleared: true, jobId });
+      } catch (error) {
+        reply(sendResponse, { ok: false, error: error.message || String(error) });
+      }
+    })();
+    return true;
+  }
+
+  // Abandon a failed Gemini attempt so the next one starts completely clean:
+  // delete the conversation that errored, close its tab, and drop the job lock.
+  //
+  // Gemini fails often enough (rate limit, "something went wrong", a refusal)
+  // that retrying inside the same chat mostly reproduces the failure — the
+  // model keeps answering in the context of the broken turn. A fresh tab and a
+  // fresh conversation is what actually recovers, and `ensureGeminiTab` already
+  // creates a new tab per job, so the retry only has to clear this state.
+  if (message.type === "gemini/discard-failed-chat") {
+    (async () => {
+      try {
+        const jobId = message.jobId || (await readCurrentJob())?.jobId || null;
+        const targetTabs = new Set();
+        for (const [id, tabIds] of jobTabs.entries()) {
+          if (jobId && id !== jobId) continue;
+          for (const tabId of tabIds) targetTabs.add(tabId);
+        }
+
+        // Ask each tab to delete its own conversation, then give the Gemini UI
+        // a moment to run the delete + confirm dialog before we close the tab.
+        for (const tabId of targetTabs) {
+          try {
+            await chrome.tabs.sendMessage(tabId, {
+              type: "svdmusic/cleanup-conversation",
+              reason: "retry-after-error",
+              correlationId: message.correlationId || null,
+            });
+          } catch (_) { /* tab may already be gone */ }
+        }
+        if (targetTabs.size > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+        }
+        for (const tabId of targetTabs) {
+          try { await chrome.tabs.remove(tabId); } catch (_) { /* already closed */ }
+        }
+
+        if (jobId) {
+          await clearCurrentJob(jobId);
+          const ports = contentPortsByJob.get(jobId);
+          if (ports) {
+            for (const entry of ports) {
+              try { entry.port.disconnect(); } catch (_) { /* noop */ }
+            }
+            contentPortsByJob.delete(jobId);
+          }
+          jobTabs.delete(jobId);
+        }
+        console.log("[SW] GEMINI_DISCARD_FAILED_CHAT", {
+          jobId,
+          closedTabs: Array.from(targetTabs),
+        });
+        reply(sendResponse, { ok: true, jobId, closedTabs: targetTabs.size });
       } catch (error) {
         reply(sendResponse, { ok: false, error: error.message || String(error) });
       }

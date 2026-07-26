@@ -139,6 +139,42 @@ export async function continueAfterLogin({ correlationId, jobId }, onProgress) {
   return { correlationId, jobId, result: await waiter };
 }
 
+/**
+ * Throw the failed attempt away: the content script deletes the conversation
+ * that errored, the background closes its tab and releases the job lock. The
+ * next startLrcGeneration then opens a brand-new tab with a brand-new chat.
+ */
+export async function discardFailedLrcChat({ correlationId, jobId } = {}) {
+  try {
+    return await sendMessage({ type: "gemini/discard-failed-chat", correlationId, jobId });
+  } catch (error) {
+    console.warn("[geminiLrc] discardFailedChat failed", error);
+    return null;
+  }
+}
+
+/**
+ * Errors worth retrying in a fresh chat. Gemini's own failures (timeout while
+ * we polled the DOM, an error banner, a broken send, an unreadable attachment)
+ * are transient and usually clear on a second attempt. A cancelled job or a
+ * lock conflict is not — those mean the user has to act.
+ */
+export function isRetryableGeminiError(error) {
+  const message = String(error?.message || error || "");
+  if (!message) return false;
+  if (error?.lockedBy) return false;
+  if (/đã hủy|đã huỷ|cancelled|canceled/i.test(message)) return false;
+  return (
+    /GEMINI_ERROR/i.test(message) ||
+    /SEND_FAILED/i.test(message) ||
+    /INVALID_LRC_ATTACHMENT/i.test(message) ||
+    /DRIVE_VIEWER_TEXT_FAILED/i.test(message) ||
+    /hết thời gian chờ/i.test(message) ||
+    /timeout/i.test(message) ||
+    /không thể khởi động gemini/i.test(message)
+  );
+}
+
 export async function cancelLrcGeneration({ correlationId, jobId }) {
   if (!correlationId && !jobId) return;
   try {

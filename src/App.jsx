@@ -78,6 +78,12 @@ import {
   viewModeLog,
   viewModeWarn,
 } from "./utils/viewMode.js";
+import { isLockHeld, acquireLock, releaseLock } from "./utils/viewTransferLock.js";
+
+// A transfer can legitimately run for VIEW_TRANSFER_TIMEOUT_MS while a cold
+// target restores. Past that plus a scheduling margin it is abandoned, and the
+// lock must not keep the view-mode button disabled.
+const VIEW_TRANSFER_LOCK_TTL_MS = VIEW_TRANSFER_TIMEOUT_MS + 5000;
 
 const COVER_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect fill='%231e3a5f' width='200' height='200'/%3E%3Ccircle cx='100' cy='100' r='60' fill='none' stroke='%2300ffb3' stroke-width='4'/%3E%3Ccircle cx='100' cy='100' r='8' fill='%2300ffb3'/%3E%3C/svg%3E";
 const BANNER_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1280 720'%3E%3Crect fill='%230b1220' width='1280' height='720'/%3E%3C/svg%3E";
@@ -250,13 +256,26 @@ function App() {
   // incoming handoff with a stale zero-state.
   const pendingViewSnapshotRef = useRef(null);
 
-  // True while a transfer is mid-flight and the source might need to rollback.
-  // Used to suppress pause-persist saves during transfer rollback.
-  const isTransferringRef = useRef(false);
+  // Held while a transfer is mid-flight and the source might need to rollback.
+  // Used to suppress pause-persist saves during transfer rollback, and to keep
+  // the view-mode button from starting a second transfer on top of the first.
+  //
+  // Stores the acquisition timestamp (0 = free) rather than a boolean, so an
+  // abandoned lock expires on its own instead of disabling the button forever.
+  // Every acquire is paired with a release in a `finally`; the TTL is only the
+  // backstop. See src/utils/viewTransferLock.js.
+  const transferLockRef = useRef(0);
+  const isTransferLocked = () =>
+    isLockHeld(transferLockRef, VIEW_TRANSFER_LOCK_TTL_MS);
 
   // Tracks pending async cleanup (e.g. close-tab after READY received)
   // so it can be cancelled if a rollback races in.
   const viewTransferCleanupRef = useRef(null);
+
+  // transferId this view is currently driving as the SOURCE, or null. The
+  // broadcast bus is shared by every view in the browser, so handlers must be
+  // able to tell "my transfer committed" from "somebody else's did".
+  const inFlightTransferIdRef = useRef(null);
 
   // Mount-time diagnostic — runs exactly once via useEffect([]), NOT on
   // every render. (Earlier revisions put the log in the render body which
@@ -1948,7 +1967,7 @@ function App() {
     // Skip if a view transfer is mid-flight — the source side is about to
     // lose ownership and a snapshot from the rolling-back instance would
     // clobber the session with a post-pause time.
-    if (currentSong && !isTransferringRef.current) {
+    if (currentSong && !isTransferLocked()) {
       // force=true: pause is an explicit user action and should always
       // be written, regardless of throttle.
       persistPlaybackSession("pause", { force: true });
@@ -2321,61 +2340,67 @@ function App() {
     // Lock the receiving view too. Without this, the new UI becomes clickable
     // before the old source has closed and a fast reverse click overwrites the
     // singleton transfer record mid-commit.
-    isTransferringRef.current = true;
-    setIsViewTransitioning(true);
-    // Pending snapshot phải cùng transferId (nếu tồn tại).
-    let pendingSnap = null;
+    acquireLock(transferLockRef, VIEW_TRANSFER_LOCK_TTL_MS);
+    const endTransferUi = beginTransferUi();
+    // Everything past this point runs inside the try whose `finally` releases
+    // the lock. The two validation guards below used to sit above it and
+    // returned with the lock still held, which permanently disabled the
+    // view-mode button on this surface.
+    let sentReady = false;
     try {
-      pendingSnap = await readSessionValue("svdmusic.pendingViewSnapshot");
-    } catch (_) { /* noop */ }
-    if (
-      pendingSnap &&
-      typeof pendingSnap === "object" &&
-      pendingSnap.transferId &&
-      pendingSnap.transferId !== transferId
-    ) {
+      // Pending snapshot phải cùng transferId (nếu tồn tại).
+      let pendingSnap = null;
       try {
-        console.debug("[TRANSFER] SKIP", {
-          reason: "snapshot_mismatch",
-          trigger,
-          transferId,
-          surfaceMode,
-          pendingTransferId: pendingSnap.transferId,
-        });
-      } catch (_) {}
-      processingTransferIdsRef.current.delete(transferId);
-      return;
-    }
-    // Sidepanel target → window phải khớp với transfer.originWindowId.
-    if (surfaceMode === SIDEPANEL && typeof transfer.originWindowId === "number") {
-      try {
-        const w = await chrome.windows?.getCurrent?.();
-        const currentWId = w?.id ?? null;
-        if (currentWId != null && currentWId !== transfer.originWindowId) {
+        pendingSnap = await readSessionValue("svdmusic.pendingViewSnapshot");
+      } catch (_) { /* noop */ }
+      if (
+        pendingSnap &&
+        typeof pendingSnap === "object" &&
+        pendingSnap.transferId &&
+        pendingSnap.transferId !== transferId
+      ) {
+        try {
+          console.debug("[TRANSFER] SKIP", {
+            reason: "snapshot_mismatch",
+            trigger,
+            transferId,
+            surfaceMode,
+            pendingTransferId: pendingSnap.transferId,
+          });
+        } catch (_) {}
+        return;
+      }
+      // Sidepanel target → window phải khớp với transfer.originWindowId.
+      if (surfaceMode === SIDEPANEL && typeof transfer.originWindowId === "number") {
+        let mismatchedWindowId = null;
+        try {
+          const w = await chrome.windows?.getCurrent?.();
+          const currentWId = w?.id ?? null;
+          if (currentWId != null && currentWId !== transfer.originWindowId) {
+            mismatchedWindowId = currentWId;
+          }
+        } catch (_) { /* noop */ }
+        if (mismatchedWindowId != null) {
           try {
             console.debug("[TRANSFER] SKIP", {
               reason: "wrong_window",
               trigger,
               transferId,
               surfaceMode,
-              currentWindowId: currentWId,
+              currentWindowId: mismatchedWindowId,
               originWindowId: transfer.originWindowId,
             });
           } catch (_) {}
-          processingTransferIdsRef.current.delete(transferId);
           return;
         }
-      } catch (_) { /* noop */ }
-    }
-    let currentWindowId = null;
-    if (surfaceMode === SIDEPANEL) {
-      try {
-        const w = await chrome.windows?.getCurrent?.();
-        currentWindowId = w?.id ?? null;
-      } catch (_) { /* noop */ }
-    }
-    let sentReady = false;
-    try {
+      }
+      let currentWindowId = null;
+      if (surfaceMode === SIDEPANEL) {
+        try {
+          const w = await chrome.windows?.getCurrent?.();
+          currentWindowId = w?.id ?? null;
+        } catch (_) { /* noop */ }
+      }
       try {
         console.log("[SIDEPANEL] TRANSFER_DETECTED", {
           trigger,
@@ -2518,8 +2543,6 @@ function App() {
           await removeSessionValue("svdmusic.pendingViewSnapshot");
         }
       } catch (_) { /* noop */ }
-      isTransferringRef.current = false;
-      setIsViewTransitioning(false);
     } catch (err) {
       try {
         console.error("[SIDEPANEL] TRANSFER_ERROR", {
@@ -2531,31 +2554,35 @@ function App() {
         });
       } catch (_) { /* noop */ }
     } finally {
+      // Single release point for every exit of this function — normal return,
+      // validation guard, or thrown error. Never leave the receiving UI
+      // permanently disabled: successful targets have already attempted source
+      // cleanup; failed targets let the source timeout/rollback stay
+      // authoritative.
       processingTransferIdsRef.current.delete(transferId);
-      // Never leave the receiving UI permanently disabled. Successful targets
-      // have already attempted source cleanup; failed targets let the source
-      // timeout/rollback path remain authoritative.
-      isTransferringRef.current = false;
-      setIsViewTransitioning(false);
+      releaseLock(transferLockRef);
+      endTransferUi();
     }
   }, [surfaceMode]);
 
-  // ── View-transfer storage session listener (sidepanel-only path C) ────
-  // Chỉ sidepanel mới xử lý transfer qua kênh này.
+  // ── View-transfer storage session listener (path C) ───────────────────
+  // Registered on BOTH surfaces, each filtering on its own targetMode.
+  // It used to be sidepanel-only, which meant an already-open popup had no
+  // intake at all: the standalone surface's only other path is the
+  // URL-`transferId` mount, and that never re-runs for a popup that is already
+  // mounted. Re-detaching onto an existing popup could therefore never be
+  // acknowledged and was guaranteed to burn the full 25s timeout.
   useEffect(() => {
     try {
-      console.log("[SIDEPANEL] STORAGE_LISTENER_EFFECT", {
-        surfaceMode,
-        willRegister: surfaceMode === SIDEPANEL,
-      });
+      console.log("[VIEW] STORAGE_LISTENER_EFFECT", { surfaceMode });
     } catch (_) { /* noop */ }
     if (typeof chrome === "undefined" || !chrome.storage?.session) return undefined;
-    if (surfaceMode !== SIDEPANEL) return undefined;
     const handler = (changes, area) => {
       if (area !== "session") return;
       const t = changes?.[ACTIVE_VIEW_TRANSFER_KEY];
       try {
-        console.log("[SIDEPANEL] STORAGE_CHANGED", {
+        console.log("[VIEW] STORAGE_CHANGED", {
+          surfaceMode,
           keyPresent: Boolean(changes[ACTIVE_VIEW_TRANSFER_KEY]),
           oldValue: changes[ACTIVE_VIEW_TRANSFER_KEY]?.oldValue,
           newValue: changes[ACTIVE_VIEW_TRANSFER_KEY]?.newValue,
@@ -2564,7 +2591,9 @@ function App() {
       if (!t?.newValue) return;
       const transfer = t.newValue;
       if (!transfer || typeof transfer.transferId !== "string") return;
-      if (transfer.targetMode !== SIDEPANEL) return;
+      if (transfer.targetMode !== surfaceMode) return;
+      // Never let a view answer its own transfer: it is the source, not target.
+      if (transfer.transferId === inFlightTransferIdRef.current) return;
       void processIncomingViewTransfer(transfer, "session-onchanged");
     };
     const ownerHandler = async (changes, area) => {
@@ -2691,6 +2720,15 @@ function App() {
         case "transfer-ready": {
           const { transferId: msgTransferId } = msg.payload || {};
           if (!msgTransferId) break;
+          // Only the source of THIS transfer may act. Without the match, an
+          // unrelated view's commit cleared `viewTransferCleanupRef` — killing
+          // the 25s timeout of a transfer that was still awaiting READY, so its
+          // promise never settled and the handler never returned. It also made
+          // any side panel close itself on a stranger's transfer.
+          if (msgTransferId !== inFlightTransferIdRef.current) {
+            viewModeLog("ignoring transfer-ready for another view", msgTransferId);
+            break;
+          }
           viewModeLog("received transfer-ready", msgTransferId);
           (async () => {
             if (viewTransferCleanupRef.current) {
@@ -2760,16 +2798,59 @@ function App() {
       ]);
       if (!activeStatuses.has(active.status)) return false;
       const lastTouched = Number(active.updatedAt || active.createdAt || 0);
-      const ageMs = lastTouched > 0 ? Date.now() - lastTouched : 0;
+      // A record with no usable timestamp is unverifiable, so treat it as
+      // abandoned rather than fresh. The old code mapped it to age 0 = "fresh
+      // forever", which refused every click for the rest of the session.
+      const ageMs = lastTouched > 0 ? Date.now() - lastTouched : Number.MAX_SAFE_INTEGER;
       if (ageMs <= VIEW_TRANSFER_TIMEOUT_MS + 5000) return true;
       // Recover from metadata left by an older build or a killed Chrome view.
       await clearActiveViewTransfer(active.transferId);
       return false;
     } catch (_) {
-      // Storage being temporarily unavailable should not create a second
-      // transfer. Let the current click retry after the view settles.
-      return true;
+      // Storage being unavailable must not veto the click forever. The transfer
+      // itself is guarded by the lock and by the singleton transfer record, so
+      // proceeding is safe; refusing here just made the button look broken.
+      return false;
     }
+  }
+
+  // Mark the UI busy and hand back the matching "done" call.
+  //
+  // The lock expiring is not enough on its own: `isViewTransitioning` drives the
+  // button's `disabled` attribute, so a handler that never returns would leave
+  // the button greyed out even after the lock freed itself — and a disabled
+  // button never delivers the click that would re-check the lock. The watchdog
+  // guarantees the visual busy state can never outlive the lock.
+  function beginTransferUi() {
+    setIsViewTransitioning(true);
+    const watchdog = setTimeout(() => {
+      viewModeWarn("transfer watchdog fired — releasing a stuck busy state");
+      releaseLock(transferLockRef);
+      setIsViewTransitioning(false);
+    }, VIEW_TRANSFER_LOCK_TTL_MS);
+    return function endTransferUi() {
+      clearTimeout(watchdog);
+      setIsViewTransitioning(false);
+    };
+  }
+
+  // Abandon a transfer completely: drop the record AND the pending snapshot it
+  // owns. Clearing only the record (what every rollback path used to do) left
+  // `svdmusic.pendingViewSnapshot` behind with a dead transferId, and nothing
+  // else ever deletes that key. The next transfer then hit the
+  // `snapshot_mismatch` guard in processIncomingViewTransfer and refused to
+  // restore — so one timed-out transfer poisoned every later one for the rest
+  // of the browser session.
+  async function discardViewTransfer(transferId) {
+    try {
+      await clearActiveViewTransfer(transferId);
+    } catch (_) { /* noop */ }
+    try {
+      const stored = await readSessionValue("svdmusic.pendingViewSnapshot");
+      if (!stored || stored.transferId === transferId) {
+        await removeSessionValue("svdmusic.pendingViewSnapshot");
+      }
+    } catch (_) { /* noop */ }
   }
 
   // ── Detach: sidepanel → standalone ─────────────────────────────────────────
@@ -2777,16 +2858,31 @@ function App() {
   // post pending-snapshot to storage → create/focus standalone tab → wait
   // STANDALONE_READY with matching transferId → close sidepanel.
   // On error or timeout: rollback ownership, restore state, keep sidepanel.
+  // The lock is taken here and released in the `finally` — the body below must
+  // never touch it. React state updates are batched, so the state flag alone
+  // cannot stop two clicks delivered in the same frame; the ref-backed lock can.
+  //
+  // Releasing on EVERY exit is deliberate, including the success path. The
+  // earlier version skipped the release there on the assumption that the Side
+  // Panel unmounts once closed. It does not — its React tree lives for the whole
+  // page lifetime (CLAUDE.md v1.1.8) — so the lock survived, and the view-mode
+  // button stayed disabled for good. Releasing into a surface that really is
+  // about to be destroyed is harmless.
   async function handleDetachToStandalone() {
-    // The ref is the synchronous lock. React state updates are batched, so
-    // state alone cannot stop two clicks delivered in the same frame.
-    if (isTransferringRef.current) return;
-    isTransferringRef.current = true;
-    setIsViewTransitioning(true);
+    if (!acquireLock(transferLockRef, VIEW_TRANSFER_LOCK_TTL_MS)) return;
+    const endTransferUi = beginTransferUi();
+    try {
+      await runDetachToStandalone();
+    } finally {
+      inFlightTransferIdRef.current = null;
+      releaseLock(transferLockRef);
+      endTransferUi();
+    }
+  }
+
+  async function runDetachToStandalone() {
     if (await hasFreshViewTransferInFlight()) {
       viewModeLog("detach skipped: another transfer is still committing");
-      isTransferringRef.current = false;
-      setIsViewTransitioning(false);
       setViewModeToast("Đang hoàn tất lần chuyển trước, vui lòng bấm lại sau một chút.");
       return;
     }
@@ -2811,6 +2907,7 @@ function App() {
       ? crypto.randomUUID()
       : String(Math.random()) + "-" + String(Date.now());
     const originWindowId = await chrome.windows?.getCurrent?.().then(w => w?.id).catch(() => null);
+    inFlightTransferIdRef.current = transferId;
     const transfer = createViewTransfer({
       transferId,
       sourceMode: surfaceMode,
@@ -2831,9 +2928,7 @@ function App() {
     const url = getStandaloneUrl(transferId);
     if (!url) {
       setViewModeToast("Không thể mở trình phát trong tab riêng.");
-      setIsViewTransitioning(false);
-      isTransferringRef.current = false;
-      await clearActiveViewTransfer(transferId);
+      await discardViewTransfer(transferId);
       await acquireAudioOwnership();
       if (snap?.isPlaying) {
         try {
@@ -2854,10 +2949,10 @@ function App() {
       viewModeLog("detach timeout: no READY");
       clearReadyListeners();
       viewTransferCleanupRef.current = null;
-      isTransferringRef.current = false;
-      await clearActiveViewTransfer(transferId);
+      // The lock is released by the caller's `finally` once resolveReady below
+      // lets `await readyPromise` return — do not touch it here.
+      await discardViewTransfer(transferId);
       await acquireAudioOwnership();
-      setIsViewTransitioning(false);
       if (snap?.isPlaying) {
         try {
           audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
@@ -2871,7 +2966,13 @@ function App() {
       clearTimeout(timerId);
       viewTransferCleanupRef.current = null;
       if (unsubBc) { unsubBc(); unsubBc = null; }
-      if (removeListener) { removeListener(); removeListener = null; }
+      // Detach from the runtime bus. This used to CALL the listener (with
+      // undefined) instead of unregistering it, leaking one live listener per
+      // transfer into a Side Panel tree that never unmounts.
+      if (readyMessageListener) {
+        try { chrome.runtime.onMessage.removeListener(readyMessageListener); } catch (_) { /* noop */ }
+        readyMessageListener = null;
+      }
       if (removeStorageListener) {
         removeStorageListener();
         removeStorageListener = null;
@@ -2888,14 +2989,14 @@ function App() {
     });
 
     // SW runtime message listener.
-    let removeListener = null;
-    removeListener = (message) => {
+    let readyMessageListener = null;
+    readyMessageListener = (message) => {
       if (message?.type === "player/standalone-ready" && message?.transferId === transferId) {
         clearReadyListeners();
         resolveReady({ timedOut: false });
       }
     };
-    chrome.runtime.onMessage.addListener(removeListener);
+    chrome.runtime.onMessage.addListener(readyMessageListener);
 
     // The transfer record is the durable READY channel. This covers Chrome
     // builds where runtime messages are consumed by the service worker and a
@@ -2995,10 +3096,8 @@ function App() {
       viewModeWarn("detach: create tab failed", err);
       setViewModeToast("Không thể mở trình phát trong tab riêng.");
       clearReadyListeners();
-      isTransferringRef.current = false;
-      await clearActiveViewTransfer(transferId);
+      await discardViewTransfer(transferId);
       await acquireAudioOwnership();
-      setIsViewTransitioning(false);
       if (snap?.isPlaying) {
         try {
           audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
@@ -3022,7 +3121,8 @@ function App() {
         viewModeWarn("sidepanel-close after detach READY failed", err);
       }
     }
-    // Side panel will unmount — don't reset isViewTransitioning.
+    // The caller's `finally` releases the lock. The Side Panel's React tree
+    // outlives the closed panel, so it must not stay locked here.
   }
 
   // ── Pin back: standalone → sidepanel ───────────────────────────────────────
@@ -3030,32 +3130,40 @@ function App() {
   // sidepanel directly in user gesture → wait SIDEPANEL_READY with transferId →
   // close standalone tab.
   // On error or timeout: rollback ownership, restore state, keep standalone.
+  // Same lock contract as handleDetachToStandalone: taken here, released in the
+  // `finally`, never touched by the body.
   async function handlePinBackToSidePanel(event) {
     try {
       console.log("[PIN_BACK] ENTER", {
         isStandalone,
         surfaceMode,
         isViewTransitioning,
-        isTransferring: isTransferringRef.current,
+        isTransferring: isTransferLocked(),
       });
     } catch (_) { /* noop */ }
-    if (isTransferringRef.current) {
+    if (!acquireLock(transferLockRef, VIEW_TRANSFER_LOCK_TTL_MS)) {
       try {
         console.debug("[PIN_BACK] SKIP", {
           reason: "transfer_in_progress",
           isViewTransitioning,
-          isTransferring: isTransferringRef.current,
           surfaceMode,
         });
       } catch (_) { /* noop */ }
       return;
     }
-    isTransferringRef.current = true;
-    setIsViewTransitioning(true);
+    const endTransferUi = beginTransferUi();
+    try {
+      await runPinBackToSidePanel(event);
+    } finally {
+      inFlightTransferIdRef.current = null;
+      releaseLock(transferLockRef);
+      endTransferUi();
+    }
+  }
+
+  async function runPinBackToSidePanel(event) {
     if (await hasFreshViewTransferInFlight()) {
       viewModeLog("pin skipped: another transfer is still committing");
-      isTransferringRef.current = false;
-      setIsViewTransitioning(false);
       setViewModeToast("Đang hoàn tất lần chuyển trước, vui lòng bấm lại sau một chút.");
       return;
     }
@@ -3099,8 +3207,6 @@ function App() {
           transferId: null,
         });
       } catch (_) { /* noop */ }
-      setIsViewTransitioning(false);
-      isTransferringRef.current = false;
       return;
     }
 
@@ -3123,6 +3229,7 @@ function App() {
     const transferId = typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
       : String(Math.random()) + "-" + String(Date.now());
+    inFlightTransferIdRef.current = transferId;
     const transfer = createViewTransfer({
       transferId,
       sourceMode: surfaceMode,
@@ -3134,9 +3241,14 @@ function App() {
     await writeActiveViewTransfer(transfer);
 
     // 5. Resolve target windowId from session.
+    // `session` is declared out here on purpose: it used to be a `const` inside
+    // the try below, so the diagnostic log further down threw a ReferenceError
+    // that the surrounding catch swallowed — silently destroying the one log
+    // that explains this failure.
+    let session = null;
     let targetWindowId = null;
     try {
-      const session = await chrome.storage?.session?.get?.([
+      session = await chrome.storage?.session?.get?.([
         ORIGIN_WINDOW_ID_KEY,
       ]);
       if (session?.[ORIGIN_WINDOW_ID_KEY] != null) {
@@ -3154,14 +3266,12 @@ function App() {
           transferId,
           popupWindowId,
           originWindowId: null,
-          originWindowIdFromSession: session?.[ORIGIN_WINDOW_ID_KEY],
+          originWindowIdFromSession: session?.[ORIGIN_WINDOW_ID_KEY] ?? null,
           eventViewWindowId: event?.view?.windowId,
         });
       } catch (_) { /* noop */ }
       setViewModeToast("Không thể ghim lại Side Panel. Tab hiện tại vẫn được giữ.");
-      setIsViewTransitioning(false);
-      isTransferringRef.current = false;
-      await clearActiveViewTransfer(transferId);
+      await discardViewTransfer(transferId);
       await acquireAudioOwnership();
       if (snap?.isPlaying) {
         try {
@@ -3212,10 +3322,10 @@ function App() {
       viewModeLog("pin timeout: no SIDEPANEL_READY");
       clearReadyListeners();
       viewTransferCleanupRef.current = null;
-      isTransferringRef.current = false;
-      await clearActiveViewTransfer(transferId);
+      // The lock is released by the caller's `finally` once resolveReady below
+      // lets `await readyPromise` return — do not touch it here.
+      await discardViewTransfer(transferId);
       await acquireAudioOwnership();
-      setIsViewTransitioning(false);
       if (snap?.isPlaying) {
         try {
           audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
@@ -3232,7 +3342,13 @@ function App() {
       clearTimeout(timerId);
       viewTransferCleanupRef.current = null;
       if (unsubBc) { unsubBc(); unsubBc = null; }
-      if (removeListener) { removeListener(); removeListener = null; }
+      // Detach from the runtime bus. This used to CALL the listener (with
+      // undefined) instead of unregistering it, leaking one live listener per
+      // transfer into a Side Panel tree that never unmounts.
+      if (readyMessageListener) {
+        try { chrome.runtime.onMessage.removeListener(readyMessageListener); } catch (_) { /* noop */ }
+        readyMessageListener = null;
+      }
       if (removeStorageListener) {
         removeStorageListener();
         removeStorageListener = null;
@@ -3247,8 +3363,8 @@ function App() {
       }
     });
 
-    let removeListener = null;
-    removeListener = (message) => {
+    let readyMessageListener = null;
+    readyMessageListener = (message) => {
       try {
         console.log("[PIN_BACK] READY_MESSAGE_RECEIVED", {
           type: message?.type,
@@ -3265,7 +3381,7 @@ function App() {
       clearReadyListeners();
       resolveReady({ timedOut: false });
     };
-    chrome.runtime.onMessage.addListener(removeListener);
+    chrome.runtime.onMessage.addListener(readyMessageListener);
 
     let removeStorageListener = null;
     const storageReadyListener = (changes, area) => {
@@ -3344,10 +3460,8 @@ function App() {
         viewModeWarn("pin: SW sidePanel.open failed", err);
         setViewModeToast("Không thể ghim lại Side Panel. Tab hiện tại vẫn được giữ.");
         clearReadyListeners();
-        isTransferringRef.current = false;
-        await clearActiveViewTransfer(transferId);
+        await discardViewTransfer(transferId);
         await acquireAudioOwnership();
-        setIsViewTransitioning(false);
         if (snap?.isPlaying) {
           try {
             audioRef.current?.play()?.then(() => setIsPlaying(true)).catch(() => {});
@@ -3479,8 +3593,7 @@ function App() {
     if (closeResult?.ok !== true) {
       // Do not leave the full view visually stuck if Chrome refused both close
       // paths. It remains non-owner, while the user can retry the pin action.
-      isTransferringRef.current = false;
-      setIsViewTransitioning(false);
+      // The lock itself is released by the caller's `finally`.
       setViewModeToast("Side Panel đã mở nhưng Chrome chưa đóng tab này. Hãy bấm Ghim lại lần nữa.");
     }
   }
@@ -3494,7 +3607,10 @@ function App() {
         type: event?.type,
       });
     } catch (_) { /* noop */ }
-    if (isViewTransitioning || isTransferringRef.current) return;
+    // Only the lock gates the click. `isViewTransitioning` is display state
+    // derived from it; testing it here too would turn any state/ref drift into
+    // a permanently dead button.
+    if (isTransferLocked()) return;
     if (isStandalone) {
       handlePinBackToSidePanel(event);
     } else {
