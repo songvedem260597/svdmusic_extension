@@ -4255,8 +4255,10 @@ function App() {
                   <Waves size={15} />
                   <span>Đang phát</span>
                 </div>
-<h3>{currentSong?.title}</h3>
-                <p className="artistName">{currentSong?.artist}</p>
+                <h3 title={currentSong?.title || ""}>{currentSong?.title}</h3>
+                <p className="artistName" title={currentSong?.artist || ""}>
+                  {currentSong?.artist}
+                </p>
 
             {audioMissing ? (
               <p className="nowPlayingMissing" role="status">

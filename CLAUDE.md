@@ -6,6 +6,13 @@
 
 ## Version Changelog
 
+### v1.2.6 (2026-07-27)
+- **Tiêu đề dài ở khu "Đang phát" giờ cắt bằng "…".** Tên bài lấy từ YouTube có thể dài cả câu (kèm tên DJ, phiên bản, chữ Trung) — `.songHero h3` không giới hạn số dòng nên một tiêu đề như vậy chiếm hơn 10 dòng và đẩy vỡ bố cục (đo được: cao 622px thay vì 132px).
+- Cắt bằng `-webkit-line-clamp: 3`, xuống **2 dòng** ở màn hình thấp/hẹp (`max-height: 720px` hoặc `max-width: 720px`).
+- `.artistName` cũng cắt một dòng bằng `text-overflow: ellipsis`.
+- Thêm thuộc tính `title` cho cả tiêu đề và nghệ sĩ trong App.jsx → rê chuột xem được tên đầy đủ.
+- Các chỗ khác (`.songMeta strong`, `.miniSong strong`) vốn đã cắt sẵn, không đụng tới.
+
 ### v1.2.5 (2026-07-27)
 - **Log trong modal Thêm bài luôn cuộn tới dòng mới nhất.** `.modalLog` bị `max-height: 160px` nên các bước mới bị đẩy khuất; giờ tự cuộn xuống đáy mỗi khi có dòng mới.
   - Không giành quyền cuộn với người dùng: nếu họ kéo lên đọc bước cũ thì ngừng bám đáy, kéo lại xuống thì bám tiếp (ngưỡng 24px).

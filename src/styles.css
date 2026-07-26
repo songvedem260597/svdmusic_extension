@@ -8117,3 +8117,30 @@ html[data-theme="light"] body {
 .appShell.theme-light.homeView.hasCustomBg .weatherLocation {
   color: #1b2739;
 }
+
+/* ── Tiêu đề dài thì cắt bằng "…" ─────────────────────────────────────────
+   Tên bài lấy từ YouTube có thể dài cả câu (kèm tên DJ, phiên bản, chữ Trung).
+   `.songHero h3` không giới hạn số dòng nên một tiêu đề như vậy đẩy cao khu
+   "Đang phát" tới hơn 10 dòng và làm vỡ bố cục. Cắt còn 3 dòng; thẻ `title`
+   trong JSX cho phép rê chuột xem đầy đủ. */
+.songHero h3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.artistName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Màn hình thấp/hẹp thì 3 dòng vẫn chiếm quá nhiều chỗ. */
+@media (max-height: 720px), (max-width: 720px) {
+  .songHero h3 {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+}
