@@ -697,123 +697,140 @@ function mp3cowFetchMain(payload) {
 // background.js, so they must NOT reference any closure variables from
 // this file. They live entirely inside the page context.
 function yt2mp3ConvertMain(youtubeId) {
+  // Runs in the page context of yt2mp3.cloud (injected via chrome.scripting),
+  // so the site's own same-origin API is reachable directly.
+  //
+  // We used to call https://api.yt2mp3converter.net/api/new/convert?youtubeId=…
+  // That host is a stale endpoint the site no longer uses; it now answers
+  //   HTTP 500 {"error":"Maximum number of key switches or API calls reached"}
+  // for every video, while the site itself converts fine. The extension read
+  // that as "provider is down" and fell through to MP3Cow.
+  //
+  // The live endpoint is same-origin `/api/convert?id=<videoId>` and answers
+  //   {"status":"processing","progress":0,…}   while converting
+  //   {"status":"ok","link":…,"filesize":…,"duration":…,"title":…}  when ready
+  // so this now polls instead of giving up on the first non-ok response.
   return new Promise(function (resolve) {
     if (!youtubeId || typeof youtubeId !== "string") {
       resolve({ __yt2mp3Error: { stage: "NO_LINK", message: "Thiếu youtubeId." } });
       return;
     }
-    var url =
-      "https://api.yt2mp3converter.net/api/new/convert?youtubeId=" +
-      encodeURIComponent(youtubeId);
-    var xhr;
-    try {
-      xhr = new XMLHttpRequest();
-    } catch (e) {
+
+    var POLL_INTERVAL_MS = 3000;
+    var MAX_ATTEMPTS = 50; // ~2.5 minutes of conversion time
+    var attempt = 0;
+
+    function fail(stage, message, status, raw) {
       resolve({
         __yt2mp3Error: {
-          stage: "INJECT_FAILED",
-          message: "Không tạo được XMLHttpRequest: " + (e && e.message ? e.message : String(e)),
+          stage: stage,
+          message: message,
+          status: typeof status === "number" ? status : undefined,
+          raw: raw ? String(raw).slice(0, 500) : undefined,
         },
       });
-      return;
     }
-    try {
-      xhr.open("GET", url, true);
-      xhr.timeout = 15000;
-      xhr.setRequestHeader("Accept", "application/json");
-    } catch (e) {
-      resolve({
-        __yt2mp3Error: {
-          stage: "INJECT_FAILED",
-          message: "Không cấu hình được XHR: " + (e && e.message ? e.message : String(e)),
-        },
-      });
-      return;
-    }
-    xhr.onload = function () {
-      var status = xhr.status;
-      if (status === 403) {
-        resolve({
-          __yt2mp3Error: {
-            stage: "API_FORBIDDEN",
-            message: "API trả 403 Forbidden.",
-            status: status,
-          },
-        });
-        return;
-      }
-      if (status < 200 || status >= 300) {
-        resolve({
-          __yt2mp3Error: {
-            stage: "NO_LINK",
-            message: "API trả HTTP " + status + ".",
-            status: status,
-            raw: (xhr.responseText || "").slice(0, 500),
-          },
-        });
-        return;
-      }
-      var parsed = null;
+
+    function poll() {
+      attempt += 1;
+      var url =
+        "/api/convert?id=" + encodeURIComponent(youtubeId) + "&t=" + Date.now();
+      var xhr;
       try {
-        parsed = JSON.parse(xhr.responseText);
+        xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.timeout = 15000;
+        xhr.setRequestHeader("Accept", "application/json");
       } catch (e) {
-        resolve({
-          __yt2mp3Error: {
-            stage: "NO_LINK",
-            message:
-              "API không trả JSON hợp lệ: " + (e && e.message ? e.message : String(e)),
-            raw: (xhr.responseText || "").slice(0, 500),
-          },
-        });
+        fail("INJECT_FAILED", "Không cấu hình được XHR: " + (e && e.message ? e.message : String(e)));
         return;
       }
-      if (
-        !parsed ||
-        parsed.status !== "ok" ||
-        (parsed.progress | 0) < 100 ||
-        !parsed.link
-      ) {
-        resolve({
-          __yt2mp3Error: {
-            stage: "NO_LINK",
-            message:
-              "API không trả về link MP3 (status=" +
-              (parsed && parsed.status ? parsed.status : "?") +
-              ", progress=" +
-              (parsed && parsed.progress != null ? parsed.progress : "?") +
-              ").",
-          },
-        });
-        return;
+
+      xhr.onload = function () {
+        var status = xhr.status;
+        var raw = xhr.responseText || "";
+        if (status === 403) {
+          fail("API_FORBIDDEN", "API trả 403 Forbidden.", status);
+          return;
+        }
+        if (status < 200 || status >= 300) {
+          fail("NO_LINK", "API trả HTTP " + status + ".", status, raw);
+          return;
+        }
+
+        var parsed = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (e) {
+          fail("NO_LINK", "API không trả JSON hợp lệ: " + (e && e.message ? e.message : String(e)), status, raw);
+          return;
+        }
+        if (!parsed) {
+          fail("NO_LINK", "API trả body rỗng.", status, raw);
+          return;
+        }
+
+        var apiStatus = typeof parsed.status === "string" ? parsed.status : "";
+
+        // Ready: hand the link back exactly as before.
+        if (apiStatus === "ok" && parsed.link && (parsed.progress | 0) >= 100) {
+          resolve({
+            link: parsed.link,
+            title: typeof parsed.title === "string" ? parsed.title : "",
+            duration: typeof parsed.duration === "number" ? parsed.duration : null,
+            filesize: typeof parsed.filesize === "number" ? parsed.filesize : null,
+            videoId: typeof parsed.videoId === "string" ? parsed.videoId : youtubeId,
+          });
+          return;
+        }
+
+        // Explicit refusal — no point waiting it out.
+        if (apiStatus === "error" || apiStatus === "failed" || parsed.error) {
+          fail(
+            "API_REJECTED",
+            typeof parsed.error === "string" && parsed.error
+              ? parsed.error
+              : "Dịch vụ từ chối chuyển đổi (status=" + (apiStatus || "?") + ").",
+            status,
+            raw
+          );
+          return;
+        }
+
+        // Still converting (or a shape we do not recognise yet) — keep polling.
+        if (attempt < MAX_ATTEMPTS) {
+          setTimeout(poll, POLL_INTERVAL_MS);
+          return;
+        }
+        fail(
+          "CONVERSION_TIMEOUT",
+          "Chưa có link sau " + MAX_ATTEMPTS + " lần kiểm tra (status=" +
+            (apiStatus || "?") + ", progress=" +
+            (parsed.progress != null ? parsed.progress : "?") + ").",
+          status,
+          raw
+        );
+      };
+
+      xhr.onerror = function () {
+        fail("NO_LINK", "XHR lỗi mạng (onerror).");
+      };
+      xhr.ontimeout = function () {
+        if (attempt < MAX_ATTEMPTS) {
+          setTimeout(poll, POLL_INTERVAL_MS);
+          return;
+        }
+        fail("NO_LINK", "XHR timeout sau 15s.");
+      };
+
+      try {
+        xhr.send();
+      } catch (e) {
+        fail("INJECT_FAILED", "XHR.send() lỗi: " + (e && e.message ? e.message : String(e)));
       }
-      resolve({
-        link: parsed.link,
-        title: typeof parsed.title === "string" ? parsed.title : "",
-        duration: typeof parsed.duration === "number" ? parsed.duration : null,
-        filesize: typeof parsed.filesize === "number" ? parsed.filesize : null,
-        videoId: typeof parsed.videoId === "string" ? parsed.videoId : youtubeId,
-      });
-    };
-    xhr.onerror = function () {
-      resolve({
-        __yt2mp3Error: { stage: "NO_LINK", message: "XHR lỗi mạng (onerror)." },
-      });
-    };
-    xhr.ontimeout = function () {
-      resolve({
-        __yt2mp3Error: { stage: "NO_LINK", message: "XHR timeout sau 15s." },
-      });
-    };
-    try {
-      xhr.send();
-    } catch (e) {
-      resolve({
-        __yt2mp3Error: {
-          stage: "INJECT_FAILED",
-          message: "XHR.send() lỗi: " + (e && e.message ? e.message : String(e)),
-        },
-      });
     }
+
+    poll();
   });
 }
 

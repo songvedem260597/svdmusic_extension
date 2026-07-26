@@ -6,6 +6,17 @@
 
 ## Version Changelog
 
+### v1.2.2 (2026-07-27)
+- **Fix nguyên nhân thật của "Không thể tải MP3": bridge yt2mp3 gọi endpoint đã chết.**
+- `yt2mp3ConvertMain` gọi `https://api.yt2mp3converter.net/api/new/convert?youtubeId=…` — host này trang **không còn dùng**, và giờ trả `HTTP 500 {"error":"Maximum number of key switches or API calls reached"}` cho **mọi** video. Extension đọc thành "provider chết" → rơi sang MP3Cow (đang hỏng thật) → fail toàn bộ.
+- Endpoint sống là **same-origin** `/api/convert?id=<videoId>` ngay trên yt2mp3.cloud — chính là nơi bridge đã inject script, nên gọi thẳng được, không cần host_permissions mới.
+- Protocol mới cần **polling**: `{"status":"processing","progress":0}` khi đang convert → `{"status":"ok","link":…,"filesize":…,"duration":…,"title":…}` khi xong. Code cũ chỉ gọi 1 lần rồi bỏ cuộc nếu chưa `ok`. Nay poll 3s/lần, tối đa 50 lần (~2.5 phút), bail ngay nếu `status: error`.
+- Response shape của endpoint mới trùng khớp cái hàm vốn đã mong đợi (`link`/`title`/`duration`/`filesize`/`videoId`), nên phần còn lại của pipeline không phải sửa gì.
+- Kiểm chứng trên endpoint thật: bài 61 phút resolve trong **421ms / 1 lần gọi**, trả link `api2.yt2mp3converter.net`, duration 3660, filesize 139.6 MB. Đo tốc độ tải thật: **29.1 Mbps → ~38 giây** cho 139.6 MB, thừa trong trần `MP3_WORKER_MAX_TIMEOUT_MS` (180s).
+- Hai giả thuyết đã loại trừ bằng đo đạc (ghi lại để khỏi đi lại đường cũ): trần timeout 3 phút **không** phải vấn đề (38s < 180s); `arrayBufferToBase64` với file 146 MB **chạy được** (195.2 MB chuỗi, 1.4s, 346 MB heap) và 195 MB qua `JSON.stringify`/`structuredClone` trong trang thật cũng trót lọt.
+- **Còn một ẩn số chưa kiểm được**: giới hạn kích thước thật của `chrome.runtime.sendMessage` khi bàn giao ~186 MB base64 từ service worker sang sidepanel. Chỉ lộ ra khi chạy extension thật. Nếu vỡ ở đây thì hướng sửa là bỏ base64 (cắt khúc, hoặc để sidepanel tự fetch link).
+- `YT2MP3_API_BASE` giờ không còn nơi dùng (giữ lại khai báo, chưa xoá).
+
 ### v1.2.1 (2026-07-27)
 - **Fix "Không thể tải MP3 ... (HTTP 200)" — fallback MP3Cow bị bỏ qua.** yt2mp3 trả HTTP 200 nhưng body là trang HTML/JSON báo lỗi thay vì audio; `validateMp3Blob` bắt đúng và ném lỗi kèm `httpStatus = 200`.
 - Nguyên nhân: `isFallbackEligible` (background.js) chỉ xét mã 403/404/410/429/5xx cộng vài regex trên chuỗi lỗi. Không mã nào khớp 200, nên fallback bị bỏ qua và bài hát fail luôn dù nhà cung cấp thứ hai đang sẵn sàng. Việc có fallback hay không phụ thuộc chuỗi lỗi **tình cờ** chứa chữ "audio" (qua `type=audio/mpeg`) — tức hoàn toàn hên xui.
