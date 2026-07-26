@@ -6,6 +6,14 @@
 
 ## Version Changelog
 
+### v1.2.5 (2026-07-27)
+- **Log trong modal Thêm bài luôn cuộn tới dòng mới nhất.** `.modalLog` bị `max-height: 160px` nên các bước mới bị đẩy khuất; giờ tự cuộn xuống đáy mỗi khi có dòng mới.
+  - Không giành quyền cuộn với người dùng: nếu họ kéo lên đọc bước cũ thì ngừng bám đáy, kéo lại xuống thì bám tiếp (ngưỡng 24px).
+  - `logAutoScrollingRef` để bỏ qua sự kiện `scroll` do chính code phát ra — thiếu cờ này thì handler đọc vị trí giữa chừng, tưởng người dùng cuộn đi và tắt bám đáy, khiến log dừng cách đáy ~52px (đã đo).
+- **Tự đóng modal sau khi thêm bài thành công** — `AUTO_CLOSE_AFTER_SUCCESS_MS = 1500`, đủ để đọc "Hoàn tất." và thấy bài xuất hiện trong danh sách. Nút "Đóng" vẫn còn nếu muốn đóng sớm. Xoá `correlationId`/`jobId` trước khi đóng để không bắn lệnh huỷ vô nghĩa cho một job đã xong.
+- **Lỗi tự gây ra khi làm tính năng này, đã sửa:** ban đầu đặt hai `useRef` + hai `useEffect` ở dòng ~2007, tức **sau** `if (!open) return null;` (dòng 392). Hook chạy có điều kiện làm hỏng thứ tự hook của cả component — modal đóng mà không lưu được bài. Đã chuyển toàn bộ lên trước early return, kèm chú thích cảnh báo tại chỗ.
+- Kiểm chứng: log `distanceFromBottomPx: 0` (bám sát đáy), modal tự đóng sau ~1.5s, bài vào danh sách (`rows: 1`).
+
 ### v1.2.4 (2026-07-27)
 - **Light mode + ảnh nền tuỳ chỉnh: ảnh nền gần như không thấy.** Hai panel `.nowPlaying`/`.songListPanel` phủ `rgba(255,255,255,0.5)` với `blur(3px)` — blur yếu nên nó chỉ là màng trắng chứ không ra kính mờ, mà panel chiếm gần hết khung nhìn. Các dòng `.songRow` lại là màu **đặc** `#f5f8f7`, chồng thêm một mảng kín nữa bên trong.
 - Sửa: panel + `.songRow` + `.weatherWidget` chuyển sang trong suốt, blur tăng 3px → 16px.

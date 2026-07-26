@@ -91,6 +91,10 @@ function mapMp3ErrorToMessage(httpStatus, fallbackReason) {
   }
 }
 
+// Long enough to read the success line and watch the song appear in the list,
+// short enough that it does not feel like the modal is stuck open.
+const AUTO_CLOSE_AFTER_SUCCESS_MS = 1500;
+
 const STEPS = {
   IDLE: "idle",
   VALIDATE: "validate",
@@ -385,6 +389,51 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
     };
   }, []);
 
+  // Keep the log pinned to the newest line, but stop fighting the user: if
+  // they scroll up to read an earlier step, leave it alone until they scroll
+  // back down.
+  const logRef = useRef(null);
+  const logStickToBottomRef = useRef(true);
+  // Scrolling from code fires the same `scroll` event a user gesture does.
+  // Without this flag the handler below read the mid-flight position, decided
+  // the user had scrolled away, and switched sticking off — so the log stopped
+  // following after the first auto-scroll and sat a few lines short of the end.
+  const logAutoScrollingRef = useRef(false);
+
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el || !logStickToBottomRef.current) return;
+    logAutoScrollingRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    // Released on the next frame, after the scroll event this just triggered.
+    requestAnimationFrame(() => { logAutoScrollingRef.current = false; });
+  }, [progressLog]);
+
+  function handleLogScroll() {
+    if (logAutoScrollingRef.current) return;
+    const el = logRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    logStickToBottomRef.current = distanceFromBottom < 24;
+  }
+
+  // Close on success. The delay is long enough to read "Hoàn tất." and see the
+  // song land in the list; the Đóng button is still there if the user beats it.
+  useEffect(() => {
+    if (step !== STEPS.DONE) return undefined;
+    const timer = setTimeout(() => {
+      // The job finished, so there is nothing to cancel — drop the ids first
+      // so handleClose does not fire a pointless cancel at the background.
+      correlationIdRef.current = null;
+      jobIdRef.current = null;
+      onCloseRef.current?.();
+    }, AUTO_CLOSE_AFTER_SUCCESS_MS);
+    return () => clearTimeout(timer);
+  }, [step]);
+
+  // Hooks above this line ONLY — everything past the early return is skipped
+  // when the modal is closed, and a hook that runs conditionally corrupts
+  // React's hook order for the whole component.
   if (!open) return null;
 
   const appendLog = (line) => {
@@ -2278,7 +2327,12 @@ export default function AddSongModal({ open, onClose, onSongAdded }) {
           ) : null}
 
           {progressLog.length ? (
-            <pre className="modalLog" aria-live="polite">
+            <pre
+              className="modalLog"
+              aria-live="polite"
+              ref={logRef}
+              onScroll={handleLogScroll}
+            >
               {progressLog.join("\n")}
             </pre>
           ) : null}
