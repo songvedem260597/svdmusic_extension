@@ -2034,6 +2034,14 @@ function App() {
     Math.max(0.08, baseShadeOpacity - 0.15) * backgroundOverlayScale;
   const gradientBottom =
     Math.min(0.65, baseShadeOpacity + 0.12) * backgroundOverlayScale;
+  // Light mode only: the cards are what actually hide the wallpaper, so the
+  // same slider drives how thin they get. There is no single value that both
+  // shows the image and keeps dark text readable on every wallpaper — a dark
+  // wallpaper needs a thicker card, a light one does not — so this is the
+  // user's call, not a constant.
+  //   100% -> 0.30 (wallpaper prominent)
+  //    10% -> 0.59 (text safe on any wallpaper)
+  const customPanelAlpha = 0.62 - bgStrength * 0.32;
 
   const appShellClass = [
     "appShell",
@@ -3940,6 +3948,7 @@ function App() {
         "--custom-bg-shade-opacity": String(shadeOpacity),
         "--custom-bg-gradient-top": String(gradientTop),
         "--custom-bg-gradient-bottom": String(gradientBottom),
+        "--custom-panel-alpha": String(customPanelAlpha),
       }}
     >
       {/* Ambient background — default banner image + optional user-picked image

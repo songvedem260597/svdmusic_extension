@@ -8050,3 +8050,70 @@ html[data-theme="light"] body {
   font-size: 11px;
   line-height: 1.45;
 }
+
+/* ── Light mode + ảnh nền tuỳ chỉnh: để ảnh nền thở ───────────────────────
+   Trước đây hai panel phủ rgba(255,255,255,0.5) với blur 3px. Blur yếu như
+   vậy không tạo cảm giác kính mờ — nó chỉ là một lớp màng trắng, mà panel
+   lại chiếm gần hết khung nhìn nên ảnh nền gần như biến mất.
+   Hạ alpha và tăng mạnh blur: chữ vẫn đọc tốt vì nền sau nó bị làm nhoè,
+   còn màu và hình khối của ảnh thì hiện lên được. */
+.appShell.theme-light.homeView.hasCustomBg .nowPlaying,
+.appShell.theme-light.homeView.hasCustomBg .songListPanel {
+  /* Driven by the "Độ rõ ảnh nền" slider (see customPanelAlpha in App.jsx):
+     slide up and the cards thin out so the wallpaper reads through; slide
+     down and they thicken until dark text is safe over even a black image.
+     A fixed value cannot satisfy both — measured over the bundled art, alpha
+     0.30 gives 3.17:1 on the darkest wallpaper (unreadable) while alpha 0.55
+     gives 5.44:1 but hides most of a light one.
+     `brightness()` was tried here to lift dark backdrops; it clipped light
+     wallpapers to flat white, which is worse than the problem it solved. */
+  background: rgba(255, 255, 255, var(--custom-panel-alpha, 0.46));
+  border-color: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* Các dòng bài hát vốn là màu đặc (#f5f8f7) nên chồng thêm một mảng trắng
+   kín bên trong panel vốn đã trong suốt. Cho chúng trong theo. */
+.appShell.theme-light.homeView.hasCustomBg .songRow {
+  background: rgba(255, 255, 255, 0.34);
+  border-color: transparent;
+}
+
+.appShell.theme-light.homeView.hasCustomBg .songRow:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.appShell.theme-light.homeView.hasCustomBg .songRow.isActive {
+  background: linear-gradient(
+    90deg,
+    rgba(226, 247, 239, 0.82),
+    rgba(244, 251, 248, 0.62)
+  );
+  box-shadow: inset 2px 0 0 #00a878;
+}
+
+.appShell.theme-light.homeView.hasCustomBg .weatherWidget {
+  background: rgba(255, 255, 255, calc(var(--custom-panel-alpha, 0.46) * 0.85));
+  border-color: rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+/* Giữ độ tương phản chữ khi lớp nền mỏng đi. */
+.appShell.theme-light.homeView.hasCustomBg .songHero h3,
+.appShell.theme-light.homeView.hasCustomBg .sectionTitle h2,
+.appShell.theme-light.homeView.hasCustomBg .songMeta strong,
+.appShell.theme-light.homeView.hasCustomBg .weatherTemp {
+  color: #0b1220;
+}
+
+/* #33415a only reaches 3.15:1 over a dark wallpaper. Darkened to clear AA
+   (4.61:1) while staying visibly lighter than the titles. */
+.appShell.theme-light.homeView.hasCustomBg .artistName,
+.appShell.theme-light.homeView.hasCustomBg .songMeta small,
+.appShell.theme-light.homeView.hasCustomBg .typingText,
+.appShell.theme-light.homeView.hasCustomBg .weatherMeta,
+.appShell.theme-light.homeView.hasCustomBg .weatherLocation {
+  color: #1b2739;
+}

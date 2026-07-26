@@ -6,6 +6,17 @@
 
 ## Version Changelog
 
+### v1.2.4 (2026-07-27)
+- **Light mode + ảnh nền tuỳ chỉnh: ảnh nền gần như không thấy.** Hai panel `.nowPlaying`/`.songListPanel` phủ `rgba(255,255,255,0.5)` với `blur(3px)` — blur yếu nên nó chỉ là màng trắng chứ không ra kính mờ, mà panel chiếm gần hết khung nhìn. Các dòng `.songRow` lại là màu **đặc** `#f5f8f7`, chồng thêm một mảng kín nữa bên trong.
+- Sửa: panel + `.songRow` + `.weatherWidget` chuyển sang trong suốt, blur tăng 3px → 16px.
+- **Nối thanh trượt "Độ rõ ảnh nền" (vốn đã có) vào độ trong của panel.** Trước đây nó chỉ điều khiển lớp phủ ambient. Thêm biến `--custom-panel-alpha` (App.jsx): slider 100% → alpha 0.30 (ảnh nổi), 10% → 0.59 (chữ an toàn trên mọi ảnh).
+- Lý do phải để người dùng quyết, đo bằng contrast ratio trên ảnh nền sáng/tối nhất trong bộ art:
+  - alpha 0.30 trên ảnh **tối**: tiêu đề 3.17:1, chữ phụ 1.74:1 → **không đọc được**
+  - alpha 0.55 trên ảnh tối: 6.77 / 5.44 → đọc tốt nhưng che gần hết ảnh sáng
+  - Không có hằng số nào vừa hiện ảnh vừa đọc được trên **mọi** ảnh nền — chữ đen cần nền sáng, nền sáng thì che ảnh.
+- Đã thử `backdrop-filter: brightness(1.8)` để nâng sáng nền sau kính (giúp ảnh tối): **bỏ**, vì nó làm ảnh sáng cháy trắng phẳng lì — tệ hơn vấn đề ban đầu (panel avg 245/255).
+- Chữ phụ `#33415a` → `#1b2739`: màu cũ chỉ đạt 3.15:1 trên ảnh nền tối, màu mới 4.61:1 (qua WCAG AA) mà vẫn nhạt hơn tiêu đề.
+
 ### v1.2.3 (2026-07-27)
 - **Fix treo ở `bridge/mp3-ready` với file lớn — bỏ hẳn base64 khỏi đường bàn giao MP3.**
 - Triệu chứng: log chạy đến `Đã tải xong dữ liệu MP3, đang kiểm tra...` rồi đứng vĩnh viễn. Đây là dòng service worker in ra **ngay trước** `arrayBufferToBase64()` + `sendMessage`.
