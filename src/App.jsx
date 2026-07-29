@@ -2027,7 +2027,7 @@ function App() {
   const bgStrength = backgroundOpacity / 100;
   // Light mode keeps the image more present while the cards provide the
   // readability layer. Dark mode intentionally retains its existing shade.
-  const backgroundOverlayScale = theme === "light" ? 0.4 : 1;
+  const backgroundOverlayScale = theme === "light" ? 0.22 : 1;
   const baseShadeOpacity = 0.75 - bgStrength * 0.55;
   const shadeOpacity = baseShadeOpacity * backgroundOverlayScale;
   const gradientTop =
@@ -2039,9 +2039,9 @@ function App() {
   // shows the image and keeps dark text readable on every wallpaper — a dark
   // wallpaper needs a thicker card, a light one does not — so this is the
   // user's call, not a constant.
-  //   100% -> 0.30 (wallpaper prominent)
-  //    10% -> 0.59 (text safe on any wallpaper)
-  const customPanelAlpha = 0.62 - bgStrength * 0.32;
+  //   100% -> 0.34 (wallpaper prominent)
+  //    10% -> 0.56 (text safe on any wallpaper)
+  const customPanelAlpha = 0.58 - bgStrength * 0.24;
 
   const appShellClass = [
     "appShell",
